@@ -1,6 +1,6 @@
 # web-cad-engine
 
-A complete **Web-based CAD (Computer-Aided Design) engine** that runs in your browser. Draw, edit, and export professional CAD drawings with AutoCAD 2007 (AC1021) DXF format support.
+A complete **Web-based CAD (Computer-Aided Design) engine** that runs in your browser. Draw, edit, and export professional CAD drawings with AutoCAD 2007 (AC1021) DXF format support. Built with Gemini AI and Copilot AI.
 
 ## Features
 
