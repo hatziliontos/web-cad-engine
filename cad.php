@@ -36,6 +36,51 @@ function hexToACI($hex) {
     return $bestIndex;
 }
 
+function getDXFGridBounds($entities) {
+    $bounds = ['minX' => INF, 'minY' => INF, 'maxX' => -INF, 'maxY' => -INF];
+    foreach ($entities as $entity) {
+        $type = $entity['type'] ?? '';
+        $points = [];
+        if ($type === 'line') {
+            $points = [
+                [(float)$entity['x1'], (float)$entity['y1']],
+                [(float)$entity['x2'], (float)$entity['y2']]
+            ];
+        } elseif ($type === 'rect') {
+            $x1 = (float)$entity['x'];
+            $y1 = (float)$entity['y'];
+            $x2 = $x1 + (float)$entity['w'];
+            $y2 = $y1 + (float)$entity['h'];
+            $points = [[$x1, $y1], [$x2, $y2]];
+        } elseif ($type === 'pline') {
+            foreach (($entity['points'] ?? []) as $point) {
+                $points[] = [(float)$point['x'], (float)$point['y']];
+            }
+        } elseif (in_array($type, ['circle', 'arc'], true)) {
+            $cx = (float)$entity['cx'];
+            $cy = (float)$entity['cy'];
+            $radius = abs((float)$entity['r']);
+            $points = [[$cx - $radius, $cy - $radius], [$cx + $radius, $cy + $radius]];
+        } elseif ($type === 'ellipse') {
+            $cx = (float)$entity['cx'];
+            $cy = (float)$entity['cy'];
+            $points = [
+                [$cx - abs((float)$entity['rx']), $cy - abs((float)$entity['ry'])],
+                [$cx + abs((float)$entity['rx']), $cy + abs((float)$entity['ry'])]
+            ];
+        } elseif ($type === 'point') {
+            $points = [[(float)$entity['x'], (float)$entity['y']]];
+        }
+        foreach ($points as $point) {
+            $bounds['minX'] = min($bounds['minX'], $point[0]);
+            $bounds['minY'] = min($bounds['minY'], $point[1]);
+            $bounds['maxX'] = max($bounds['maxX'], $point[0]);
+            $bounds['maxY'] = max($bounds['maxY'], $point[1]);
+        }
+    }
+    return is_infinite($bounds['minX']) ? null : $bounds;
+}
+
 // AutoCAD 2007 (AC1021) DXF Generator
 function generateDXF2007($entities, $angleUnit = 'deg') {
     $dxf = [];
@@ -54,7 +99,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
     $hArchTickBR  = "2A";
     $hNext        = 0x50;
 
-    $aunits = ($angleUnit === 'grad') ? 2 : 0;
+    $aunits = $angleUnit === 'grad' ? 2 : ($angleUnit === 'rad' ? 3 : 0);
 
     // 1. HEADER SECTION (Correct System Variable Group Codes)
     $dxf[] = "0{$nl}SECTION";
@@ -432,6 +477,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
             if ($type === 'line') {
                 $dxf[] = "0{$nl}LINE";
                 $dxf[] = "5{$nl}{$handle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
@@ -446,6 +492,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
             elseif ($type === 'rect') {
                 $dxf[] = "0{$nl}LWPOLYLINE";
                 $dxf[] = "5{$nl}{$handle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
@@ -469,6 +516,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
                 if (count($pts) > 0) {
                     $dxf[] = "0{$nl}LWPOLYLINE";
                     $dxf[] = "5{$nl}{$handle}";
+                    $dxf[] = "330{$nl}{$hModelBlockR}";
                     $dxf[] = "100{$nl}AcDbEntity";
                     $dxf[] = "8{$nl}0";
                     $dxf[] = "62{$nl}{$color}";
@@ -486,6 +534,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
             elseif ($type === 'circle') {
                 $dxf[] = "0{$nl}CIRCLE";
                 $dxf[] = "5{$nl}{$handle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
@@ -512,6 +561,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
 
                 $dxf[] = "0{$nl}ARC";
                 $dxf[] = "5{$nl}{$handle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
@@ -527,6 +577,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
             elseif ($type === 'ellipse') {
                 $dxf[] = "0{$nl}ELLIPSE";
                 $dxf[] = "5{$nl}{$handle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
@@ -545,14 +596,97 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
             elseif ($type === 'point') {
                 $dxf[] = "0{$nl}POINT";
                 $dxf[] = "5{$nl}{$handle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
                 $dxf[] = "100{$nl}AcDbPoint";
                 $dxf[] = "10{$nl}" . sprintf('%.4f', (float)$ent['x']);
                 $dxf[] = "20{$nl}" . sprintf('%.4f', (float)$ent['y']);
-                $dxf[] = "30{$nl}0.0000";
+                $dxf[] = "30{$nl}" . sprintf('%.4f', (float)($ent['z'] ?? 0));
             }
+        }
+    }
+
+    $gridBounds = getDXFGridBounds($entities);
+    if ($gridBounds) {
+        $gridStep = 50.0;
+        $gridMinX = floor($gridBounds['minX'] / $gridStep) * $gridStep;
+        $gridMaxX = ceil($gridBounds['maxX'] / $gridStep) * $gridStep;
+        $gridMinY = floor($gridBounds['minY'] / $gridStep) * $gridStep;
+        $gridMaxY = ceil($gridBounds['maxY'] / $gridStep) * $gridStep;
+        $gridHandle = $hNext++;
+        $gridColor = 8;
+        $labelHeight = max(2.0, $gridStep * 0.16);
+        $labelOffset = $labelHeight * 1.5;
+
+        for ($x = $gridMinX; $x <= $gridMaxX; $x += $gridStep) {
+            $dxf[] = "0{$nl}LINE";
+            $dxf[] = "5{$nl}" . dechex($gridHandle++);
+            $dxf[] = "330{$nl}{$hModelBlockR}";
+            $dxf[] = "100{$nl}AcDbEntity";
+            $dxf[] = "8{$nl}0";
+            $dxf[] = "62{$nl}{$gridColor}";
+            $dxf[] = "100{$nl}AcDbLine";
+            $dxf[] = "10{$nl}" . sprintf('%.4f', $x);
+            $dxf[] = "20{$nl}" . sprintf('%.4f', $gridMinY);
+            $dxf[] = "30{$nl}0.0000";
+            $dxf[] = "11{$nl}" . sprintf('%.4f', $x);
+            $dxf[] = "21{$nl}" . sprintf('%.4f', $gridMaxY);
+            $dxf[] = "31{$nl}0.0000";
+        }
+
+        for ($y = $gridMinY; $y <= $gridMaxY; $y += $gridStep) {
+            $dxf[] = "0{$nl}LINE";
+            $dxf[] = "5{$nl}" . dechex($gridHandle++);
+            $dxf[] = "330{$nl}{$hModelBlockR}";
+            $dxf[] = "100{$nl}AcDbEntity";
+            $dxf[] = "8{$nl}0";
+            $dxf[] = "62{$nl}{$gridColor}";
+            $dxf[] = "100{$nl}AcDbLine";
+            $dxf[] = "10{$nl}" . sprintf('%.4f', $gridMinX);
+            $dxf[] = "20{$nl}" . sprintf('%.4f', $y);
+            $dxf[] = "30{$nl}0.0000";
+            $dxf[] = "11{$nl}" . sprintf('%.4f', $gridMaxX);
+            $dxf[] = "21{$nl}" . sprintf('%.4f', $y);
+            $dxf[] = "31{$nl}0.0000";
+        }
+
+        foreach (range($gridMinX, $gridMaxX, $gridStep) as $x) {
+            $label = (string)(int)round($x);
+            $labelWidth = max(1, strlen($label)) * $labelHeight * 0.6;
+            $dxf[] = "0{$nl}TEXT";
+            $dxf[] = "5{$nl}" . dechex($gridHandle++);
+            $dxf[] = "330{$nl}{$hModelBlockR}";
+            $dxf[] = "100{$nl}AcDbEntity";
+            $dxf[] = "8{$nl}0";
+            $dxf[] = "100{$nl}AcDbText";
+            $dxf[] = "10{$nl}" . sprintf('%.4f', $x + ($labelHeight / 2));
+            $dxf[] = "20{$nl}" . sprintf('%.4f', $gridMinY - $labelOffset - ($labelWidth / 2));
+            $dxf[] = "30{$nl}0.0000";
+            $dxf[] = "40{$nl}" . sprintf('%.4f', $labelHeight);
+            $dxf[] = "1{$nl}{$label}";
+            $dxf[] = "50{$nl}90.0";
+            $dxf[] = "7{$nl}STANDARD";
+            $dxf[] = "100{$nl}AcDbText";
+        }
+
+        foreach (range($gridMinY, $gridMaxY, $gridStep) as $y) {
+            $label = (string)(int)round($y);
+            $labelWidth = max(1, strlen($label)) * $labelHeight * 0.6;
+            $dxf[] = "0{$nl}TEXT";
+            $dxf[] = "5{$nl}" . dechex($gridHandle++);
+            $dxf[] = "330{$nl}{$hModelBlockR}";
+            $dxf[] = "100{$nl}AcDbEntity";
+            $dxf[] = "8{$nl}0";
+            $dxf[] = "100{$nl}AcDbText";
+            $dxf[] = "10{$nl}" . sprintf('%.4f', $gridMinX - $labelOffset - $labelWidth);
+            $dxf[] = "20{$nl}" . sprintf('%.4f', $y - ($labelHeight / 2));
+            $dxf[] = "30{$nl}0.0000";
+            $dxf[] = "40{$nl}" . sprintf('%.4f', $labelHeight);
+            $dxf[] = "1{$nl}{$label}";
+            $dxf[] = "7{$nl}STANDARD";
+            $dxf[] = "100{$nl}AcDbText";
         }
     }
 
@@ -759,10 +893,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'save') {
         header('Content-Type: application/json; charset=utf-8');
         $jsonContent = $_POST['data'] ?? '{}';
-        if (file_put_contents($dataFile, $jsonContent)) {
+        // Decode and re-encode with formatting
+        $decoded = json_decode($jsonContent, true);
+        $formatted = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if (file_put_contents($dataFile, $formatted)) {
             echo json_encode(['status' => 'success']);
         } else {
-            echo json_encode(['status' => 'error', 'message' => 'Αποτυχία εγγραφής αρχείου.']);
+            echo json_encode(['status' => 'error', 'message' => 'Failed to write file.']);
         }
         exit;
     }
@@ -772,7 +909,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (file_exists($dataFile)) {
             echo json_encode(['status' => 'success', 'data' => json_decode(file_get_contents($dataFile), true)]);
         } else {
-            echo json_encode(['status' => 'error', 'message' => 'Δεν βρέθηκε αποθηκευμένο σχέδιο.']);
+            echo json_encode(['status' => 'error', 'message' => 'No saved drawing found.']);
         }
         exit;
     }
@@ -807,7 +944,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="el">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -849,6 +986,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         button:hover, select:hover { background: #4c4c4c; }
         button.active { background: var(--accent); border-color: #0098ff; }
+        .icon-btn {
+            width: 30px;
+            height: 28px;
+            padding: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+        .icon-btn .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
         input[type="color"] { padding: 0 2px; width: 32px; height: 26px; }
         label { font-size: 11px; display: flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text-main); }
 
@@ -858,12 +1005,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         #properties-palette {
             width: 330px;
+            min-width: 240px;
+            max-width: 600px;
+            flex: 0 0 auto;
+            resize: horizontal;
+            overflow: auto;
             background: var(--bg-panel);
             border-left: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
             font-size: 12px;
         }
+        #properties-resizer {
+            width: 6px;
+            flex: 0 0 6px;
+            background: #303038;
+            border-left: 1px solid #444;
+            border-right: 1px solid #1a1a1a;
+            cursor: col-resize;
+        }
+        #properties-resizer:hover,
+        #properties-resizer.dragging { background: var(--accent); }
         .panel-header {
             background: #2d2d30;
             padding: 8px 12px;
@@ -979,29 +1141,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .toast-error { border-left-color: #f44336; }
         .toast-info { border-left-color: #2196f3; }
         .toast-warning { border-left-color: #ff9800; }
+        #point-import-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 1100;
+        }
+        #point-import-modal.open { display: flex; }
+        .point-import-panel {
+            width: min(520px, calc(100vw - 32px));
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+        }
+        .point-import-panel h3 { margin-bottom: 8px; font-size: 14px; }
+        #point-import-input {
+            width: 100%;
+            min-height: 180px;
+            resize: vertical;
+            padding: 8px;
+            color: #fff;
+            background: #1e1e1e;
+            border: 1px solid #555;
+            font: 12px Consolas, monospace;
+        }
+        .point-import-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
     </style>
 </head>
 <body>
 
 <div id="toolbar">
     <div class="btn-group">
-        <button id="tool-select" class="tool-btn active" data-tool="select">Select</button>
-        <button id="tool-line" class="tool-btn" data-tool="line">Line</button>
-        <button id="tool-pline" class="tool-btn" data-tool="pline">Polyline (PL)</button>
-        <button id="tool-rect" class="tool-btn" data-tool="rect">Rectangle</button>
-        <button id="tool-circle" class="tool-btn" data-tool="circle">Circle</button>
-        <button id="tool-arc" class="tool-btn" data-tool="arc">Arc</button>
-        <button id="tool-ellipse" class="tool-btn" data-tool="ellipse">Ellipse</button>
-        <button id="tool-point" class="tool-btn" data-tool="point">Point</button>
+        <button id="tool-select" class="tool-btn icon-btn active" data-tool="select" title="Select"><svg viewBox="0 0 24 24"><path d="M5 3l4 14 3-4 4 5 2-2-4-5 5-1z"/></svg><span class="sr-only">Select</span></button>
+        <button id="tool-line" class="tool-btn icon-btn" data-tool="line" title="Line"><svg viewBox="0 0 24 24"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/></svg><span class="sr-only">Line</span></button>
+        <button id="tool-pline" class="tool-btn icon-btn" data-tool="pline" title="Polyline (PL)"><svg viewBox="0 0 24 24"><path d="M4 18l5-7 5 3 6-8"/><circle cx="4" cy="18" r="1.5"/><circle cx="9" cy="11" r="1.5"/><circle cx="14" cy="14" r="1.5"/><circle cx="20" cy="6" r="1.5"/></svg><span class="sr-only">Polyline</span></button>
+        <button id="tool-rect" class="tool-btn icon-btn" data-tool="rect" title="Rectangle"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14"/><path d="M4 5h3M4 5v3M20 19h-3M20 19v-3"/></svg><span class="sr-only">Rectangle</span></button>
+        <button id="tool-circle" class="tool-btn icon-btn" data-tool="circle" title="Circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="sr-only">Circle</span></button>
+        <button id="tool-arc" class="tool-btn icon-btn" data-tool="arc" title="Arc"><svg viewBox="0 0 24 24"><path d="M4 17a9 9 0 0 1 13-10"/><path d="M4 17l-1-5M4 17l5-1"/><circle cx="4" cy="17" r="1.5"/></svg><span class="sr-only">Arc</span></button>
+        <button id="tool-ellipse" class="tool-btn icon-btn" data-tool="ellipse" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="5"/><path d="M4 12h16M12 7v10"/></svg><span class="sr-only">Ellipse</span></button>
+        <button id="tool-point" class="tool-btn icon-btn" data-tool="point" title="Point"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg><span class="sr-only">Point</span></button>
+        <button id="btn-import-points" class="icon-btn" title="Import Points"><svg viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M4 7V4h5M20 7V4h-5"/></svg><span class="sr-only">Import Points</span></button>
+        <button id="btn-generate-contours" class="icon-btn" title="Generate 1 m Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate 1 m Contours</span></button>
+        <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
     </div>
 
     <div class="btn-group">
-        <select id="angleUnits" title="Μονάδα Μέτρησης Γωνιών (Αποθηκεύεται)">
+        <select id="angleUnits" title="Angle Measurement Unit (Saved)">
             <option value="deg">Degrees (°)</option>
             <option value="grad">Grads (g)</option>
+            <option value="rad">Radians (rad)</option>
         </select>
-        <input type="color" id="strokeColor" value="#ffffff" title="Χρώμα Οντότητας">
-        <select id="lineWidth" title="Πάχος Γραμμής">
+        <input type="color" id="strokeColor" value="#ffffff" title="Entity Color">
+        <select id="lineWidth" title="Line Width">
             <option value="1">1 px</option>
             <option value="2" selected>2 px</option>
             <option value="3">3 px</option>
@@ -1015,15 +1210,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <label><input type="checkbox" id="orthoToggle"> Ortho (F8)</label>
     </div>
 
-    <div class="btn-group">
-        <button id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
-        <button id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
-        <button id="btn-delete" title="Delete Selected (Del)">Delete</button>
-        <button id="btn-clear">Clear</button>
-    </div>
-
     <div class="btn-group" style="border: none;">
-        <button id="btn-export-dxf" style="background: #e65100; border-color: #f57c00; font-weight: 600;">Εξαγωγή σε DXF (2007)</button>
+        <button id="btn-export-dxf" class="icon-btn" title="Export to DXF (2007)" style="background: #e65100; border-color: #f57c00; font-weight: 600;"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M5 7V4h14v3"/></svg><span class="sr-only">Export to DXF (2007)</span></button>
         <span id="save-indicator" style="font-size: 11px; color: #4ec9b0; margin-left: 6px;">● Auto-saved</span>
     </div>
 </div>
@@ -1033,6 +1221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <canvas id="cadCanvas"></canvas>
     </div>
 
+    <div id="properties-resizer" title="Resize properties panel"></div>
     <div id="properties-palette">
         <div class="panel-header">
             <span>PROPERTIES</span>
@@ -1040,7 +1229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="panel-content" id="properties-container">
             <div style="color: var(--text-muted); text-align: center; margin-top: 40px;">
-                Επιλέξτε ένα αντικείμενο για προβολή και επεξεργασία ιδιοτήτων.
+                Select an entity to view and edit its properties.
             </div>
         </div>
     </div>
@@ -1059,6 +1248,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div id="toast-container"></div>
 
+<div id="point-import-modal" role="dialog" aria-modal="true" aria-labelledby="point-import-title">
+    <div class="point-import-panel">
+        <h3 id="point-import-title">Import Points</h3>
+        <textarea id="point-import-input" placeholder="One point per line: X,Y or X,Y,Z&#10;Tabs are also accepted"></textarea>
+        <div class="point-import-actions">
+            <button id="btn-cancel-point-import">Cancel</button>
+            <button id="btn-apply-point-import" class="active">Add Points</button>
+        </div>
+    </div>
+</div>
+
 <script>
 (() => {
     const canvas = document.getElementById('cadCanvas');
@@ -1070,8 +1270,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const propContainer = document.getElementById('properties-container');
     const propCount = document.getElementById('prop-entity-count');
     const angleUnitsSelect = document.getElementById('angleUnits');
+    const lineWidthSelect = document.getElementById('lineWidth');
     const toastContainer = document.getElementById('toast-container');
     const saveIndicator = document.getElementById('save-indicator');
+    const apiEndpoint = window.location.pathname;
+    const propertiesResizer = document.getElementById('properties-resizer');
+    const propertiesPalette = document.getElementById('properties-palette');
+
+    propertiesResizer.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        propertiesResizer.classList.add('dragging');
+        propertiesResizer.setPointerCapture(event.pointerId);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    propertiesResizer.addEventListener('pointermove', (event) => {
+        if (!propertiesResizer.hasPointerCapture(event.pointerId)) return;
+        const mainRect = document.getElementById('main-container').getBoundingClientRect();
+        const width = Math.max(240, Math.min(600, mainRect.right - event.clientX));
+        propertiesPalette.style.width = `${width}px`;
+        propertiesPalette.style.flexBasis = `${width}px`;
+        resize();
+    });
+
+    propertiesResizer.addEventListener('pointerup', (event) => {
+        propertiesResizer.releasePointerCapture(event.pointerId);
+        propertiesResizer.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        triggerAutoSave();
+    });
 
     const savedUnit = localStorage.getItem('cad_angle_unit') || 'deg';
     angleUnitsSelect.value = savedUnit;
@@ -1110,19 +1339,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     function azimuthRadToValue(aziRad) {
-        return angleUnitsSelect.value === 'grad' ? (aziRad * 200) / Math.PI : (aziRad * 180) / Math.PI;
+        if (angleUnitsSelect.value === 'grad') return (aziRad * 200) / Math.PI;
+        if (angleUnitsSelect.value === 'rad') return aziRad;
+        return (aziRad * 180) / Math.PI;
     }
 
     function azimuthValueToRad(val) {
         const num = parseStrictFloat(val);
-        return angleUnitsSelect.value === 'grad' ? (num * Math.PI) / 200 : (num * Math.PI) / 180;
+        if (angleUnitsSelect.value === 'grad') return (num * Math.PI) / 200;
+        if (angleUnitsSelect.value === 'rad') return num;
+        return (num * Math.PI) / 180;
     }
 
     function formatAzimuth(dx, dy) {
         const aziRad = calculateAzimuthRad(dx, dy);
         const val = azimuthRadToValue(aziRad);
-        const unit = angleUnitsSelect.value === 'grad' ? 'g' : '°';
+        const unit = angleUnitsSelect.value === 'grad' ? 'g' : (angleUnitsSelect.value === 'rad' ? 'rad' : '°');
         return { val: val.toFixed(4), unit, rad: aziRad };
+    }
+
+    function getAngleUnitLabel() {
+        return angleUnitsSelect.value === 'grad' ? 'g' : (angleUnitsSelect.value === 'rad' ? 'rad' : '°');
+    }
+
+    function getFullAngleValue() {
+        return angleUnitsSelect.value === 'grad' ? 400 : (angleUnitsSelect.value === 'rad' ? 2 * Math.PI : 360);
     }
 
     function normalizeAngle(rad) {
@@ -1207,6 +1448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // State & History
     let entities = [];
     let selectedEntity = null;
+    let selectedEntities = new Set();
     let selectedSegmentIndex = null;
     let selectedVertexIndex = 0;
     let currentTool = 'select';
@@ -1222,6 +1464,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let activeSnap = null;
     let activeGrip = null;
     let hoveredGrip = null;
+    let selectionBoxStart = null;
+    let selectionBoxCurrent = null;
+    let isSelectingBox = false;
+    let clipboardEntities = [];
+    let activeMove = null;
+    let moveCommand = null;
+    let lastMiddleClickTime = 0;
+    let pastePreview = null;
 
     let undoStack = [];
     let redoStack = [];
@@ -1234,13 +1484,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         autoSaveTimer = setTimeout(() => {
             const payload = {
                 angleUnit: angleUnitsSelect.value,
+                zoom: camera.zoom,
+                lineWidth: lineWidthSelect.value,
+                propertiesWidth: propertiesPalette.getBoundingClientRect().width,
+                viewCenterVersion: 2,
+                viewCenterX: -camera.x / camera.zoom,
+                viewCenterY: camera.y / camera.zoom,
                 entities: entities
             };
             const formData = new FormData();
             formData.append('action', 'save');
             formData.append('data', JSON.stringify(payload));
 
-            fetch('cad.php', { method: 'POST', body: formData })
+            fetch(apiEndpoint, { method: 'POST', body: formData })
                 .then(res => res.json())
                 .then(res => {
                     if (res.status === 'success' && saveIndicator) {
@@ -1264,13 +1520,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (currentTool === 'pline' && isDrawing && plineVertices.length > 0) {
             plineVertices.pop();
             if (plineVertices.length === 0) isDrawing = false;
-            showToast('Αναίρεση κορυφής Polyline.', 'info', 1500);
+            showToast('Polyline vertex undone.', 'info', 1500);
             render();
             return;
         }
 
         if (undoStack.length === 0) {
-            showToast('Δεν υπάρχουν άλλες ενέργειες για αναίρεση (Undo).', 'warning', 1800);
+            showToast('No more actions to undo.', 'warning', 1800);
             return;
         }
 
@@ -1278,17 +1534,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const previousState = undoStack.pop();
         entities = JSON.parse(previousState);
         selectedEntity = null;
+        selectedEntities.clear();
         selectedSegmentIndex = null;
         selectedVertexIndex = 0;
         updatePropertiesPalette();
         render();
         triggerAutoSave();
-        showToast('Αναίρεση (Undo) επιτυχής.', 'info', 1500);
+        showToast('Undo completed.', 'info', 1500);
     }
 
     function executeRedo() {
         if (redoStack.length === 0) {
-            showToast('Δεν υπάρχουν ενέργειες για επαναφορά (Redo).', 'warning', 1800);
+            showToast('No actions to redo.', 'warning', 1800);
             return;
         }
 
@@ -1296,12 +1553,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const nextState = redoStack.pop();
         entities = JSON.parse(nextState);
         selectedEntity = null;
+        selectedEntities.clear();
         selectedSegmentIndex = null;
         selectedVertexIndex = 0;
         updatePropertiesPalette();
         render();
         triggerAutoSave();
-        showToast('Επαναφορά (Redo) επιτυχής.', 'info', 1500);
+        showToast('Redo completed.', 'info', 1500);
     }
 
     function switchToSelectMode(entityToSelect = null) {
@@ -1320,18 +1578,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (entityToSelect) {
             selectedEntity = entityToSelect;
+            selectedEntities = new Set([entityToSelect]);
             selectedSegmentIndex = entityToSelect.type === 'pline' ? 0 : null;
             selectedVertexIndex = 0;
+            showToast(`${entityToSelect.type.toUpperCase()} created.`, 'success', 1500);
+        } else {
+            selectedEntity = null;
+            selectedEntities.clear();
         }
         updatePropertiesPalette();
         render();
     }
 
-    let camera = { x: 0, y: 0, zoom: 1 };
+    const savedZoom = parseFloat(localStorage.getItem('cad_zoom'));
+    let camera = {
+        x: 0,
+        y: 0,
+        zoom: Number.isFinite(savedZoom) ? Math.max(0.05, Math.min(savedZoom, 100)) : 1
+    };
     const GRID_SIZE = 50;
     const SNAP_TOLERANCE_PX = 14;
     const SELECT_TOLERANCE_PX = 8;
     const GRIP_HIT_RADIUS_PX = 8;
+
+    function getGridSize() {
+        const rawSize = GRID_SIZE / camera.zoom;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(rawSize)));
+        const normalized = rawSize / magnitude;
+        const step = normalized <= 1 ? 1 : (normalized <= 2 ? 2 : (normalized <= 5 ? 5 : 10));
+        return Math.max(1, step * magnitude);
+    }
 
     function screenToWorld(sx, sy) {
         return {
@@ -1373,6 +1649,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return { x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y) };
         }
         return null;
+    }
+
+    function isPointOnArc(point, arc) {
+        const azi = calculateAzimuthRad(point.x - arc.cx, point.y - arc.cy);
+        return isAzimuthBetween(azi, arc.startAzi, arc.endAzi);
+    }
+
+    function getSegmentCircleIntersections(segment, circle) {
+        const dx = segment.p2.x - segment.p1.x;
+        const dy = segment.p2.y - segment.p1.y;
+        const fx = segment.p1.x - circle.cx;
+        const fy = segment.p1.y - circle.cy;
+        const a = dx * dx + dy * dy;
+        if (a < 1e-12) return [];
+
+        const b = 2 * (fx * dx + fy * dy);
+        const c = fx * fx + fy * fy - circle.r * circle.r;
+        const discriminant = b * b - 4 * a * c;
+        if (discriminant < -1e-9) return [];
+
+        const roots = [];
+        const root = Math.sqrt(Math.max(0, discriminant));
+        [(-b - root) / (2 * a), (-b + root) / (2 * a)].forEach(t => {
+            if (t >= -1e-9 && t <= 1 + 1e-9) {
+                const point = { x: segment.p1.x + t * dx, y: segment.p1.y + t * dy };
+                if (!roots.some(existing => Math.hypot(existing.x - point.x, existing.y - point.y) < 1e-7)) {
+                    roots.push(point);
+                }
+            }
+        });
+        return roots;
+    }
+
+    function getCircleCircleIntersections(first, second) {
+        const dx = second.cx - first.cx;
+        const dy = second.cy - first.cy;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 1e-9 || distance > first.r + second.r + 1e-9 || distance < Math.abs(first.r - second.r) - 1e-9) {
+            return [];
+        }
+
+        const a = (first.r * first.r - second.r * second.r + distance * distance) / (2 * distance);
+        const heightSquared = first.r * first.r - a * a;
+        if (heightSquared < -1e-9) return [];
+
+        const height = Math.sqrt(Math.max(0, heightSquared));
+        const baseX = first.cx + a * dx / distance;
+        const baseY = first.cy + a * dy / distance;
+        const offsetX = -dy * height / distance;
+        const offsetY = dx * height / distance;
+        const points = [{ x: baseX + offsetX, y: baseY + offsetY }];
+        if (height > 1e-7) points.push({ x: baseX - offsetX, y: baseY - offsetY });
+        return points;
+    }
+
+    function getIntersectionPoints() {
+        const points = [];
+        const addPoint = point => {
+            if (!points.some(existing => Math.hypot(existing.x - point.x, existing.y - point.y) < 1e-7)) {
+                points.push(point);
+            }
+        };
+
+        for (let i = 0; i < entities.length; i++) {
+            const first = entities[i];
+            const firstSegments = getEntitySegments(first);
+            for (let j = i + 1; j < entities.length; j++) {
+                const second = entities[j];
+                const secondSegments = getEntitySegments(second);
+
+                firstSegments.forEach(firstSegment => {
+                    secondSegments.forEach(secondSegment => {
+                        const intersection = getLineIntersection(firstSegment.p1, firstSegment.p2, secondSegment.p1, secondSegment.p2);
+                        if (intersection) addPoint(intersection);
+                    });
+                });
+
+                const firstCircle = first.type === 'circle' || first.type === 'arc' ? first : null;
+                const secondCircle = second.type === 'circle' || second.type === 'arc' ? second : null;
+                if (firstCircle && secondSegments.length) {
+                    secondSegments.forEach(segment => {
+                        getSegmentCircleIntersections(segment, firstCircle).forEach(point => {
+                            if (first.type === 'circle' || isPointOnArc(point, first)) addPoint(point);
+                        });
+                    });
+                }
+                if (secondCircle && firstSegments.length) {
+                    firstSegments.forEach(segment => {
+                        getSegmentCircleIntersections(segment, secondCircle).forEach(point => {
+                            if (second.type === 'circle' || isPointOnArc(point, second)) addPoint(point);
+                        });
+                    });
+                }
+                if (firstCircle && secondCircle) {
+                    getCircleCircleIntersections(firstCircle, secondCircle).forEach(point => {
+                        if ((first.type === 'circle' || isPointOnArc(point, first)) &&
+                            (second.type === 'circle' || isPointOnArc(point, second))) {
+                            addPoint(point);
+                        }
+                    });
+                }
+            }
+        }
+        return points;
     }
 
     function getEntitySegments(ent) {
@@ -1436,6 +1816,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                            { x: ent.cx - ent.r, y: ent.cy, type: 'quadrant' },
                            { x: ent.cx, y: ent.cy + ent.r, type: 'quadrant' },
                            { x: ent.cx, y: ent.cy - ent.r, type: 'quadrant' });
+
+                if (refPoint) {
+                    const vx = refPoint.x - ent.cx;
+                    const vy = refPoint.y - ent.cy;
+                    const distanceSquared = vx * vx + vy * vy;
+                    const radiusSquared = ent.r * ent.r;
+
+                    if (distanceSquared >= radiusSquared && distanceSquared > 0) {
+                        const distance = Math.sqrt(distanceSquared);
+                        const radialX = vx / distance;
+                        const radialY = vy / distance;
+
+                        // Perpendicular snap: the two points on the circle along the radial line.
+                        snaps.push(
+                            { x: ent.cx + radialX * ent.r, y: ent.cy + radialY * ent.r, type: 'perpendicular' },
+                            { x: ent.cx - radialX * ent.r, y: ent.cy - radialY * ent.r, type: 'perpendicular' }
+                        );
+
+                        // Tangent snap: points where the segment from refPoint is tangent to the circle.
+                        const tangentBaseDistance = radiusSquared / distance;
+                        const tangentOffsetDistance = ent.r * Math.sqrt(distanceSquared - radiusSquared) / distance;
+                        const baseX = ent.cx + tangentBaseDistance * radialX;
+                        const baseY = ent.cy + tangentBaseDistance * radialY;
+                        snaps.push(
+                            { x: baseX - tangentOffsetDistance * radialY, y: baseY + tangentOffsetDistance * radialX, type: 'tangent' },
+                            { x: baseX + tangentOffsetDistance * radialY, y: baseY - tangentOffsetDistance * radialX, type: 'tangent' }
+                        );
+                    }
+                }
             } else if (ent.type === 'ellipse') {
                 snaps.push({ x: ent.cx, y: ent.cy, type: 'center' });
                 snaps.push({ x: ent.cx + ent.rx, y: ent.cy, type: 'quadrant' },
@@ -1460,12 +1869,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
 
-        for (let i = 0; i < allSegments.length; i++) {
-            for (let j = i + 1; j < allSegments.length; j++) {
-                const inter = getLineIntersection(allSegments[i].p1, allSegments[i].p2, allSegments[j].p1, allSegments[j].p2);
-                if (inter) snaps.push({ x: inter.x, y: inter.y, type: 'intersection' });
-            }
-        }
+        getIntersectionPoints().forEach(intersection => {
+            snaps.push({ x: intersection.x, y: intersection.y, type: 'intersection' });
+        });
 
         if (refPoint) {
             allSegments.forEach(seg => {
@@ -1491,7 +1897,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const { discrete, segments } = getSnapCandidates(refPt, excludeEntity);
 
         let bestSnap = null;
-        let minDistance = SNAP_TOLERANCE_PX;
+        // During drawing, increase snap tolerance to make snapping easier
+        let minDistance = isDrawing ? SNAP_TOLERANCE_PX * 1.5 : SNAP_TOLERANCE_PX;
 
         discrete.forEach(pt => {
             const screenPt = worldToScreen(pt.x, pt.y);
@@ -1789,29 +2196,208 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return null;
     }
 
+    function getEntityBounds(ent) {
+        const points = [];
+        if (ent.type === 'line') {
+            points.push({ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 });
+        } else if (ent.type === 'rect') {
+            points.push(
+                { x: ent.x, y: ent.y },
+                { x: ent.x + ent.w, y: ent.y + ent.h }
+            );
+        } else if (ent.type === 'pline') {
+            points.push(...(ent.points || []));
+        } else if (ent.type === 'circle' || ent.type === 'arc') {
+            points.push(
+                { x: ent.cx - ent.r, y: ent.cy - ent.r },
+                { x: ent.cx + ent.r, y: ent.cy + ent.r }
+            );
+        } else if (ent.type === 'ellipse') {
+            points.push(
+                { x: ent.cx - ent.rx, y: ent.cy - ent.ry },
+                { x: ent.cx + ent.rx, y: ent.cy + ent.ry }
+            );
+        } else if (ent.type === 'point') {
+            points.push({ x: ent.x, y: ent.y });
+        }
+        if (!points.length) return null;
+        return {
+            minX: Math.min(...points.map(point => point.x)),
+            minY: Math.min(...points.map(point => point.y)),
+            maxX: Math.max(...points.map(point => point.x)),
+            maxY: Math.max(...points.map(point => point.y))
+        };
+    }
+
+    function zoomToExtents() {
+        const bounds = entities.map(getEntityBounds).filter(Boolean);
+        if (!bounds.length) {
+            camera.x = 0;
+            camera.y = 0;
+            camera.zoom = 1;
+        } else {
+            const minX = Math.min(...bounds.map(bound => bound.minX));
+            const minY = Math.min(...bounds.map(bound => bound.minY));
+            const maxX = Math.max(...bounds.map(bound => bound.maxX));
+            const maxY = Math.max(...bounds.map(bound => bound.maxY));
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const width = Math.max(maxX - minX, 1);
+            const height = Math.max(maxY - minY, 1);
+            const availableWidth = Math.max(canvas.width, 1);
+            const availableHeight = Math.max(canvas.height, 1);
+
+            camera.zoom = Math.max(0.05, Math.min(availableWidth / width, availableHeight / height, 100));
+            camera.x = -centerX * camera.zoom;
+            camera.y = centerY * camera.zoom;
+        }
+        localStorage.setItem('cad_zoom', String(camera.zoom));
+        statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
+        render();
+        triggerAutoSave();
+        showToast('Zoom extents applied.', 'info', 1500);
+    }
+
+    function isEntityInSelectionBox(ent, start, end) {
+        const bounds = getEntityBounds(ent);
+        if (!bounds) return false;
+        const minX = Math.min(start.x, end.x);
+        const minY = Math.min(start.y, end.y);
+        const maxX = Math.max(start.x, end.x);
+        const maxY = Math.max(start.y, end.y);
+        return bounds.maxX >= minX && bounds.minX <= maxX && bounds.maxY >= minY && bounds.minY <= maxY;
+    }
+
+    function translateEntity(ent, offsetX, offsetY) {
+        if (ent.type === 'line') {
+            ent.x1 += offsetX; ent.y1 += offsetY;
+            ent.x2 += offsetX; ent.y2 += offsetY;
+        } else if (ent.type === 'rect') {
+            ent.x += offsetX; ent.y += offsetY;
+        } else if (ent.type === 'pline') {
+            ent.points.forEach(point => { point.x += offsetX; point.y += offsetY; });
+        } else if (['circle', 'ellipse', 'arc'].includes(ent.type)) {
+            ent.cx += offsetX; ent.cy += offsetY;
+        } else if (ent.type === 'point') {
+            ent.x += offsetX; ent.y += offsetY;
+        }
+        return ent;
+    }
+
+    function applyObjectMove(move, targetPoint) {
+        const offsetX = targetPoint.x - move.startWorld.x;
+        const offsetY = targetPoint.y - move.startWorld.y;
+        move.initialStates.forEach((initialState, entity) => {
+            const movedEntity = translateEntity(JSON.parse(JSON.stringify(initialState)), offsetX, offsetY);
+            Object.keys(entity).forEach(key => delete entity[key]);
+            Object.assign(entity, movedEntity);
+        });
+        move.changed = Math.abs(offsetX) > 1e-9 || Math.abs(offsetY) > 1e-9;
+    }
+
+    function getEntitiesCenter(entityList) {
+        const bounds = entityList.map(getEntityBounds).filter(Boolean);
+        if (!bounds.length) return { x: 0, y: 0 };
+        return {
+            x: (Math.min(...bounds.map(bound => bound.minX)) + Math.max(...bounds.map(bound => bound.maxX))) / 2,
+            y: (Math.min(...bounds.map(bound => bound.minY)) + Math.max(...bounds.map(bound => bound.maxY))) / 2
+        };
+    }
+
+    function getPastePreviewEntities() {
+        if (!pastePreview) return [];
+        const offsetX = pastePreview.target.x - pastePreview.anchor.x;
+        const offsetY = pastePreview.target.y - pastePreview.anchor.y;
+        return pastePreview.source.map(entity => translateEntity(
+            JSON.parse(JSON.stringify(entity)), offsetX, offsetY
+        ));
+    }
+
+    function startMoveCommand() {
+        if (!selectedEntities.size) {
+            showToast('Select one or more objects to move.', 'warning', 1800);
+            return;
+        }
+        moveCommand = {
+            source: [...selectedEntities].map(entity => ({
+                entity,
+                state: JSON.parse(JSON.stringify(entity))
+            })),
+            basePoint: null,
+            targetPoint: null
+        };
+        statusMode.innerText = 'MOVE: BASE POINT';
+        showToast('Specify the base point.', 'info', 2200);
+        render();
+    }
+
+    function getMovePreviewEntities() {
+        if (!moveCommand || !moveCommand.basePoint || !moveCommand.targetPoint) return [];
+        const offsetX = moveCommand.targetPoint.x - moveCommand.basePoint.x;
+        const offsetY = moveCommand.targetPoint.y - moveCommand.basePoint.y;
+        return moveCommand.source.map(item => translateEntity(
+            JSON.parse(JSON.stringify(item.state)), offsetX, offsetY
+        ));
+    }
+
+    function getCommandPoint(screenX, screenY) {
+        activeSnap = findBestSnap(screenX, screenY, null);
+        if (activeSnap) return { x: activeSnap.worldX, y: activeSnap.worldY };
+        const raw = screenToWorld(screenX, screenY);
+        if (document.getElementById('snapGrid').checked) {
+            return { x: Math.round(raw.x / 10) * 10, y: Math.round(raw.y / 10) * 10 };
+        }
+        return raw;
+    }
+
     function drawGrid() {
         const topLeft = screenToWorld(0, 0);
         const bottomRight = screenToWorld(canvas.width, canvas.height);
+        const gridSize = getGridSize();
 
-        const startX = Math.floor(topLeft.x / GRID_SIZE) * GRID_SIZE;
-        const endX = Math.ceil(bottomRight.x / GRID_SIZE) * GRID_SIZE;
-        const startY = Math.floor(bottomRight.y / GRID_SIZE) * GRID_SIZE;
-        const endY = Math.ceil(topLeft.y / GRID_SIZE) * GRID_SIZE;
+        const startX = Math.floor(topLeft.x / gridSize) * gridSize;
+        const endX = Math.ceil(bottomRight.x / gridSize) * gridSize;
+        const startY = Math.floor(bottomRight.y / gridSize) * gridSize;
+        const endY = Math.ceil(topLeft.y / gridSize) * gridSize;
 
         ctx.lineWidth = 1;
         ctx.strokeStyle = '#222';
         ctx.beginPath();
-        for (let x = startX; x <= endX; x += GRID_SIZE) {
+        for (let x = startX; x <= endX; x += gridSize) {
             const p1 = worldToScreen(x, startY);
             const p2 = worldToScreen(x, endY);
             ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
         }
-        for (let y = startY; y <= endY; y += GRID_SIZE) {
+        for (let y = startY; y <= endY; y += gridSize) {
             const p1 = worldToScreen(startX, y);
             const p2 = worldToScreen(endX, y);
             ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
         }
         ctx.stroke();
+
+        const gridSpacingPx = gridSize * camera.zoom;
+        if (gridSpacingPx >= 30) {
+            ctx.save();
+            ctx.fillStyle = '#777';
+            ctx.font = '10px Consolas, monospace';
+            ctx.textBaseline = 'top';
+            for (let x = startX; x <= endX; x += gridSize) {
+                const screenX = worldToScreen(x, 0).x;
+                if (screenX >= 2 && screenX <= canvas.width - 2) {
+                    ctx.textAlign = 'center';
+                    ctx.fillText(String(Math.round(x)), screenX, canvas.height - 14);
+                }
+            }
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            for (let y = startY; y <= endY; y += gridSize) {
+                const screenY = worldToScreen(0, y).y;
+                if (screenY >= 2 && screenY <= canvas.height - 2) {
+                    ctx.fillText(String(Math.round(y)), 4, screenY);
+                }
+            }
+            ctx.restore();
+        }
 
         const orig = worldToScreen(0, 0);
         ctx.lineWidth = 1.2;
@@ -1857,7 +2443,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     function drawEntity(ent, isTemp = false) {
-        const isSelected = (selectedEntity === ent);
+        const isSelected = selectedEntities.has(ent) || selectedEntity === ent;
 
         ctx.save();
         ctx.beginPath();
@@ -1924,7 +2510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     const midX = (sp1.x + sp2.x) / 2;
                     const midY = (sp1.y + sp2.y) / 2;
-                    const ang = Math.atan2(sp2.y - p1.y, p2.x - p1.x);
+                    const ang = Math.atan2(sp2.y - sp1.y, sp2.x - sp1.x);
                     const arrowLen = 12;
 
                     ctx.fillStyle = '#00e5ff';
@@ -1966,6 +2552,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const p = worldToScreen(ent.x, ent.y);
             ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
             ctx.fill();
+
+            ctx.save();
+            ctx.font = '11px Consolas, monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = isSelected ? '#00bfff' : (ent.color || '#fff');
+            ctx.fillText(`${ent.name || ''}:${formatCoord(ent.z || 0)}`, p.x + 8, p.y - 8);
+            ctx.restore();
         }
 
         ctx.restore();
@@ -2014,12 +2608,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctx.moveTo(x - s, y); ctx.lineTo(x, y); ctx.lineTo(x, y - s);
                 ctx.stroke();
                 break;
+            case 'tangent':
+                ctx.arc(x, y, s, 0, Math.PI * 2);
+                ctx.moveTo(x - s, y + s); ctx.lineTo(x + s, y - s);
+                ctx.stroke();
+                break;
             case 'nearest':
                 ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s);
                 ctx.lineTo(x - s, y + s); ctx.lineTo(x + s, y - s); ctx.closePath();
                 ctx.stroke();
                 break;
         }
+
+        const snapLabels = {
+            endpoint: 'Endpoint',
+            midpoint: 'Midpoint',
+            center: 'Center',
+            quadrant: 'Quadrant',
+            intersection: 'Intersection',
+            perpendicular: 'Perpendicular',
+            tangent: 'Tangent',
+            nearest: 'Nearest'
+        };
+        const label = snapLabels[type];
+        if (label) {
+            ctx.font = '10px Segoe UI, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'alphabetic';
+            const baselineY = y - s - 8;
+            const textWidth = ctx.measureText(label).width;
+            ctx.fillStyle = 'rgba(18, 18, 18, 0.85)';
+            ctx.fillRect(x - textWidth / 2 - 3, baselineY - 11, textWidth + 6, 14);
+            ctx.fillStyle = '#b7ffcf';
+            ctx.fillText(label, x, baselineY);
+        }
+        ctx.restore();
+    }
+
+    function drawIntersectionMarkers() {
+        ctx.save();
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 1.5;
+        getIntersectionPoints().forEach(point => {
+            const screenPoint = worldToScreen(point.x, point.y);
+            const size = 5;
+            ctx.beginPath();
+            ctx.moveTo(screenPoint.x - size, screenPoint.y - size);
+            ctx.lineTo(screenPoint.x + size, screenPoint.y + size);
+            ctx.moveTo(screenPoint.x + size, screenPoint.y - size);
+            ctx.lineTo(screenPoint.x - size, screenPoint.y + size);
+            ctx.stroke();
+        });
         ctx.restore();
     }
 
@@ -2035,11 +2674,174 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 width: parseInt(document.getElementById('lineWidth').value)
             };
             entities.push(newEntity);
-            showToast(`Polyline δημιουργήθηκε (${plineVertices.length} κορυφές, ${close ? 'Closed' : 'Open'})`, 'info');
             switchToSelectMode(newEntity);
         } else {
             switchToSelectMode(null);
         }
+    }
+
+    function getDelaunayTriangles(pointList) {
+        const bounds = pointList.reduce((result, point) => ({
+            minX: Math.min(result.minX, point.x),
+            minY: Math.min(result.minY, point.y),
+            maxX: Math.max(result.maxX, point.x),
+            maxY: Math.max(result.maxY, point.y)
+        }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+        const span = Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY, 1);
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+        const points = [...pointList,
+            { x: centerX - 20 * span, y: centerY - span },
+            { x: centerX, y: centerY + 20 * span },
+            { x: centerX + 20 * span, y: centerY - span }
+        ];
+        const superStart = pointList.length;
+        let triangles = [{ a: superStart, b: superStart + 1, c: superStart + 2 }];
+
+        const containsPoint = (triangle, point) => {
+            const a = points[triangle.a];
+            const b = points[triangle.b];
+            const c = points[triangle.c];
+            const denominator = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+            if (Math.abs(denominator) < 1e-12) return false;
+            const a2 = a.x * a.x + a.y * a.y;
+            const b2 = b.x * b.x + b.y * b.y;
+            const c2 = c.x * c.x + c.y * c.y;
+            const center = {
+                x: (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / denominator,
+                y: (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / denominator
+            };
+            const radiusSquared = (center.x - a.x) ** 2 + (center.y - a.y) ** 2;
+            return (point.x - center.x) ** 2 + (point.y - center.y) ** 2 <= radiusSquared + 1e-9;
+        };
+
+        for (let pointIndex = 0; pointIndex < pointList.length; pointIndex++) {
+            const point = points[pointIndex];
+            const badTriangles = triangles.filter(triangle => containsPoint(triangle, point));
+            const edgeCounts = new Map();
+            badTriangles.forEach(triangle => {
+                [[triangle.a, triangle.b], [triangle.b, triangle.c], [triangle.c, triangle.a]].forEach(([start, end]) => {
+                    const key = start < end ? `${start}:${end}` : `${end}:${start}`;
+                    const edge = edgeCounts.get(key) || { start, end, count: 0 };
+                    edge.count++;
+                    edgeCounts.set(key, edge);
+                });
+            });
+            triangles = triangles.filter(triangle => !badTriangles.includes(triangle));
+            edgeCounts.forEach(edge => {
+                if (edge.count === 1) triangles.push({ a: edge.start, b: edge.end, c: pointIndex });
+            });
+        }
+
+        return triangles.filter(triangle => triangle.a < superStart && triangle.b < superStart && triangle.c < superStart);
+    }
+
+    function generateContours() {
+        const pointEntities = entities.filter(entity => entity.type === 'point')
+            .filter(point => Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)) && Number.isFinite(Number(point.z)));
+        if (pointEntities.length < 3) {
+            showToast('At least 3 points with X, Y and Z are required.', 'warning', 2200);
+            return;
+        }
+
+        const pointList = pointEntities.map(point => ({ x: Number(point.x), y: Number(point.y), z: Number(point.z) }));
+        const minZ = Math.min(...pointList.map(point => point.z));
+        const maxZ = Math.max(...pointList.map(point => point.z));
+        const firstLevel = Math.ceil(minZ - 1e-9);
+        const lastLevel = Math.floor(maxZ + 1e-9);
+        if (firstLevel > lastLevel) {
+            showToast('The point elevations do not span a full 1 m contour interval.', 'warning', 2200);
+            return;
+        }
+
+        const triangles = getDelaunayTriangles(pointList);
+        const segmentsByLevel = new Map();
+        const pointKey = point => `${Math.round(point.x * 1e6)}:${Math.round(point.y * 1e6)}`;
+        for (let level = firstLevel; level <= lastLevel; level++) {
+            const segments = [];
+            triangles.forEach(triangle => {
+                const trianglePoints = [pointList[triangle.a], pointList[triangle.b], pointList[triangle.c]];
+                const intersections = [];
+                [[0, 1], [1, 2], [2, 0]].forEach(([startIndex, endIndex]) => {
+                    const start = trianglePoints[startIndex];
+                    const end = trianglePoints[endIndex];
+                    const startDelta = start.z - level;
+                    const endDelta = end.z - level;
+                    if (Math.abs(startDelta) < 1e-9 && Math.abs(endDelta) < 1e-9) return;
+                    if (startDelta * endDelta < -1e-12) {
+                        const ratio = startDelta / (startDelta - endDelta);
+                        intersections.push({ x: start.x + ratio * (end.x - start.x), y: start.y + ratio * (end.y - start.y) });
+                    } else if (Math.abs(startDelta) < 1e-9) {
+                        intersections.push({ x: start.x, y: start.y });
+                    } else if (Math.abs(endDelta) < 1e-9) {
+                        intersections.push({ x: end.x, y: end.y });
+                    }
+                });
+                const uniqueIntersections = [...new Map(intersections.map(point => [pointKey(point), point])).values()];
+                if (uniqueIntersections.length === 2) segments.push(uniqueIntersections);
+            });
+            segmentsByLevel.set(level, segments);
+        }
+
+        saveState();
+        entities = entities.filter(entity => entity.generatedBy !== 'contours');
+        let contourCount = 0;
+        segmentsByLevel.forEach((segments, level) => {
+            const adjacency = new Map();
+            const addConnection = (key, segmentIndex) => {
+                const connections = adjacency.get(key) || [];
+                connections.push(segmentIndex);
+                adjacency.set(key, connections);
+            };
+            segments.forEach((segment, index) => {
+                addConnection(pointKey(segment[0]), index);
+                addConnection(pointKey(segment[1]), index);
+            });
+
+            const used = new Set();
+            segments.forEach((segment, segmentIndex) => {
+                if (used.has(segmentIndex)) return;
+                const firstKey = pointKey(segment[0]);
+                const secondKey = pointKey(segment[1]);
+                const startAt = (adjacency.get(firstKey).length !== 2 || adjacency.get(secondKey).length === 2) ? 0 : 1;
+                const startKey = pointKey(segment[startAt]);
+                const contourPoints = [segment[startAt]];
+                let currentKey = startKey;
+                let currentSegmentIndex = segmentIndex;
+                while (currentSegmentIndex !== null && !used.has(currentSegmentIndex)) {
+                    used.add(currentSegmentIndex);
+                    const currentSegment = segments[currentSegmentIndex];
+                    const nextPoint = pointKey(currentSegment[0]) === currentKey ? currentSegment[1] : currentSegment[0];
+                    contourPoints.push(nextPoint);
+                    currentKey = pointKey(nextPoint);
+                    if (currentKey === startKey) break;
+                    const nextSegment = (adjacency.get(currentKey) || []).find(index => !used.has(index));
+                    currentSegmentIndex = nextSegment === undefined ? null : nextSegment;
+                }
+                if (contourPoints.length > 1) {
+                    const isClosed = pointKey(contourPoints[0]) === pointKey(contourPoints[contourPoints.length - 1]);
+                    if (isClosed) contourPoints.pop();
+                    entities.push({
+                        type: 'pline',
+                        points: contourPoints,
+                        closed: isClosed,
+                        elevation: level,
+                        color: '#00e5ff',
+                        width: 1,
+                        generatedBy: 'contours'
+                    });
+                    contourCount++;
+                }
+            });
+        });
+
+        selectedEntity = null;
+        selectedEntities.clear();
+        selectedSegmentIndex = null;
+        updatePropertiesPalette();
+        render();
+        triggerAutoSave();
+        showToast(`${contourCount} contour polylines generated at 1 m intervals.`, 'success', 2500);
     }
 
     function render() {
@@ -2053,6 +2855,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 console.error("Entity render error:", err, ent);
             }
         });
+
+        if (pastePreview) {
+            ctx.save();
+            ctx.globalAlpha = 0.35;
+            getPastePreviewEntities().forEach(entity => drawEntity(entity, true));
+            ctx.restore();
+        }
+
+        if (moveCommand && moveCommand.basePoint && moveCommand.targetPoint) {
+            ctx.save();
+            ctx.globalAlpha = 0.35;
+            getMovePreviewEntities().forEach(entity => drawEntity(entity, true));
+            ctx.restore();
+        }
+
+        drawIntersectionMarkers();
 
         if (isDrawing) {
             const color = document.getElementById('strokeColor').value;
@@ -2090,19 +2908,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if (activeSnap && (isDrawing || activeGrip)) {
-            drawSnapMarker(activeSnap);
+        // Draw snap marker: during drawing, show snap to existing entities
+        if (activeSnap) {
+            // Only exclude an entity if we have an active grip
+            const snapToShow = activeSnap;
+            if (isDrawing || activeGrip || moveCommand) {
+                drawSnapMarker(snapToShow);
+            }
+        }
+
+        if (isSelectingBox && selectionBoxStart && selectionBoxCurrent) {
+            const start = worldToScreen(selectionBoxStart.x, selectionBoxStart.y);
+            const current = worldToScreen(selectionBoxCurrent.x, selectionBoxCurrent.y);
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 122, 204, 0.15)';
+            ctx.strokeStyle = '#0098ff';
+            ctx.setLineDash([5, 4]);
+            ctx.fillRect(start.x, start.y, current.x - start.x, current.y - start.y);
+            ctx.strokeRect(start.x, start.y, current.x - start.x, current.y - start.y);
+            ctx.restore();
         }
     }
 
     function updatePropertiesPalette() {
         if (!selectedEntity) {
             propCount.innerText = 'No selection';
-            propContainer.innerHTML = `<div style="color: var(--text-muted); text-align: center; margin-top: 40px;">Επιλέξτε ένα αντικείμενο για προβολή και επεξεργασία ιδιοτήτων.</div>`;
+            propContainer.innerHTML = `<div style="color: var(--text-muted); text-align: center; margin-top: 40px;">Select an entity to view and edit its properties.</div>`;
             return;
         }
 
-        propCount.innerText = selectedEntity.type.toUpperCase();
+        propCount.innerText = selectedEntities.size > 1
+            ? `${selectedEntities.size} SELECTED`
+            : selectedEntity.type.toUpperCase();
         let html = `
             <div class="prop-group">
                 <div class="prop-group-title">General</div>
@@ -2129,16 +2966,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="prop-group">
                     <div class="prop-group-title">Line Geometry</div>
                     <div style="margin-bottom: 8px;">
-                        <button id="btn-reverse-line" style="width: 100%; background: #333; padding: 4px; font-size: 11px;">⇄ Αντιστροφή Φοράς (P1 ↔ P2)</button>
+                        <button id="btn-reverse-line" style="width: 100%; background: #333; padding: 4px; font-size: 11px;">⇄ Reverse Direction (P1 ↔ P2)</button>
                     </div>
                     <div class="prop-row"><label style="color:#4caf50; font-weight:bold;">Start X (P1)</label><input type="text" id="prop-x1" value="${formatCoord(selectedEntity.x1)}"></div>
                     <div class="prop-row"><label style="color:#4caf50; font-weight:bold;">Start Y (P1)</label><input type="text" id="prop-y1" value="${formatCoord(selectedEntity.y1)}"></div>
                     <div class="prop-row"><label style="color:#ff9800; font-weight:bold;">End X (P2)</label><input type="text" id="prop-x2" value="${formatCoord(selectedEntity.x2)}"></div>
                     <div class="prop-row"><label style="color:#ff9800; font-weight:bold;">End Y (P2)</label><input type="text" id="prop-y2" value="${formatCoord(selectedEntity.y2)}"></div>
-                    <div class="prop-row"><label>Delta X (Δx)</label><input type="text" readonly value="${formatCoord(dx)}"></div>
-                    <div class="prop-row"><label>Delta Y (Δy)</label><input type="text" readonly value="${formatCoord(dy)}"></div>
+                    <div class="prop-row"><label>Delta X (dx)</label><input type="text" readonly value="${formatCoord(dx)}"></div>
+                    <div class="prop-row"><label>Delta Y (dy)</label><input type="text" readonly value="${formatCoord(dy)}"></div>
                     <div class="prop-row"><label style="color:#4ec9b0; font-weight:bold;">Length (S)</label><input type="text" id="prop-len" value="${formatCoord(len)}"></div>
-                    <div class="prop-row"><label style="color:#4ec9b0; font-weight:bold;">Azimuth α (${azi.unit})</label><input type="text" id="prop-azi" value="${azi.val}"></div>
+                    <div class="prop-row"><label style="color:#4ec9b0; font-weight:bold;">Azimuth (${azi.unit})</label><input type="text" id="prop-azi" value="${azi.val}"></div>
                 </div>
             `;
         } else if (selectedEntity.type === 'pline') {
@@ -2148,7 +2985,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (selectedVertexIndex >= pts.length) selectedVertexIndex = 0;
 
             const centroid = getPolylineCentroid(pts, selectedEntity.closed);
-            const unit = angleUnitsSelect.value === 'grad' ? 'g' : '°';
+            const unit = getAngleUnitLabel();
 
             const vDetails = getPolylineVertexDetails(selectedEntity);
             const activeV = vDetails[selectedVertexIndex] || vDetails[0];
@@ -2184,7 +3021,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 let segOptions = '';
                 for (let i = 0; i < numSegs; i++) {
-                    segOptions += `<option value="${i}" ${i === sIdx ? 'selected' : ''}>Τμήμα ${i + 1} (K${i+1} → K${(i+1)%pts.length + 1})</option>`;
+                    segOptions += `<option value="${i}" ${i === sIdx ? 'selected' : ''}>Segment ${i + 1} (V${i+1} → V${(i+1)%pts.length + 1})</option>`;
                 }
 
                 segHtml = `
@@ -2198,17 +3035,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div class="prop-row"><label style="color:#4caf50; font-weight:bold;">Start Y (P1)</label><input type="text" id="prop-seg-y1" value="${formatCoord(p1.y)}"></div>
                         <div class="prop-row"><label style="color:#ff9800; font-weight:bold;">End X (P2)</label><input type="text" id="prop-seg-x2" value="${formatCoord(p2.x)}"></div>
                         <div class="prop-row"><label style="color:#ff9800; font-weight:bold;">End Y (P2)</label><input type="text" id="prop-seg-y2" value="${formatCoord(p2.y)}"></div>
-                        <div class="prop-row"><label>Delta X (Δx)</label><input type="text" readonly value="${formatCoord(dx)}"></div>
-                        <div class="prop-row"><label>Delta Y (Δy)</label><input type="text" readonly value="${formatCoord(dy)}"></div>
+                        <div class="prop-row"><label>Delta X (dx)</label><input type="text" readonly value="${formatCoord(dx)}"></div>
+                        <div class="prop-row"><label>Delta Y (dy)</label><input type="text" readonly value="${formatCoord(dy)}"></div>
                         <div class="prop-row"><label style="color:#4ec9b0; font-weight:bold;">Length (S)</label><input type="text" id="prop-seg-len" value="${formatCoord(sLen)}"></div>
-                        <div class="prop-row"><label style="color:#4ec9b0; font-weight:bold;">Azimuth α (${sAzi.unit})</label><input type="text" id="prop-seg-azi" value="${sAzi.val}"></div>
+                        <div class="prop-row"><label style="color:#4ec9b0; font-weight:bold;">Azimuth (${sAzi.unit})</label><input type="text" id="prop-seg-azi" value="${sAzi.val}"></div>
                     </div>
                 `;
             }
 
             let vertexOptions = '';
             pts.forEach((_, idx) => {
-                vertexOptions += `<option value="${idx}" ${idx === selectedVertexIndex ? 'selected' : ''}>Κορυφή K${idx + 1}</option>`;
+                vertexOptions += `<option value="${idx}" ${idx === selectedVertexIndex ? 'selected' : ''}>Vertex V${idx + 1}</option>`;
             });
 
             let activeVHtml = '';
@@ -2223,8 +3060,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="prop-row"><label>Position Y</label><input type="text" id="prop-v-y" value="${formatCoord(activeV.y)}"></div>
                     <div class="prop-row"><label>Back Azimuth</label><input type="text" readonly value="${backAziVal} ${activeV.aziBack !== null ? unit : ''}"></div>
                     <div class="prop-row"><label>Fwd Azimuth</label><input type="text" readonly value="${fwdAziVal} ${activeV.aziFwd !== null ? unit : ''}"></div>
-                    <div class="prop-row"><label style="color:#e040fb; font-weight:bold;">Γωνία Κορυφής β</label><input type="text" readonly value="${rightAngleVal} ${activeV.angleRight !== null ? unit : ''}"></div>
-                    <div class="prop-row"><label style="color:#4caf50;">Εσωτερική Γωνία</label><input type="text" readonly value="${interiorAngleVal} ${activeV.angleInterior !== null ? unit : ''}"></div>
+                    <div class="prop-row"><label style="color:#e040fb; font-weight:bold;">Vertex Angle</label><input type="text" readonly value="${rightAngleVal} ${activeV.angleRight !== null ? unit : ''}"></div>
+                    <div class="prop-row"><label style="color:#4caf50;">Interior Angle</label><input type="text" readonly value="${interiorAngleVal} ${activeV.angleInterior !== null ? unit : ''}"></div>
                 `;
             }
 
@@ -2242,13 +3079,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
 
             const theoreticalSum = selectedEntity.closed && pts.length >= 3 
-                ? (pts.length - 2) * (angleUnitsSelect.value === 'grad' ? 200 : 180) 
+                ? (pts.length - 2) * (angleUnitsSelect.value === 'grad' ? 200 : (angleUnitsSelect.value === 'rad' ? Math.PI : 180))
                 : null;
 
             html += `
                 ${segHtml}
                 <div class="prop-group">
-                    <div class="prop-group-title" style="color: #e040fb;">Vertex Angles (Γωνίες Κορυφών)</div>
+                    <div class="prop-group-title" style="color: #e040fb;">Vertex Angles</div>
                     <div class="prop-row">
                         <label>Active Vertex</label>
                         <select id="prop-vertex-select">${vertexOptions}</select>
@@ -2259,10 +3096,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <table class="cad-table">
                             <thead>
                                 <tr>
-                                    <th>Κορ.</th>
+                                    <th>Vertex</th>
                                     <th>X</th>
                                     <th>Y</th>
-                                    <th>Γωνία β</th>
+                                    <th>Angle</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2272,7 +3109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     ${theoreticalSum !== null ? `
                         <div style="font-size: 10px; color: #aaa; margin-top: 4px; display: flex; justify-content: space-between;">
-                            <span>Θεωρητικό Σ(β): <b>${theoreticalSum.toFixed(4)}${unit}</b></span>
+                            <span>Theoretical angle sum: <b>${theoreticalSum.toFixed(4)}${unit}</b></span>
                         </div>
                     ` : ''}
                 </div>
@@ -2280,7 +3117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="prop-group">
                     <div class="prop-group-title">Polyline Global</div>
                     <div style="margin-bottom: 8px;">
-                        <button id="btn-reverse-pline" style="width: 100%; background: #333; padding: 4px; font-size: 11px;">⇄ Αντιστροφή Φοράς Polyline</button>
+                        <button id="btn-reverse-pline" style="width: 100%; background: #333; padding: 4px; font-size: 11px;">⇄ Reverse Polyline Direction</button>
                     </div>
                     <div class="prop-row"><label style="color:#00e5ff; font-weight:bold;">Elevation (Z)</label><input type="text" id="prop-elevation" value="${formatCoord(selectedEntity.elevation || 0)}"></div>
                     <div class="prop-row"><label>Centroid X</label><input type="text" readonly value="${formatCoord(centroid.x)}"></div>
@@ -2345,7 +3182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const r = selectedEntity.r;
             const startAziVal = azimuthRadToValue(selectedEntity.startAzi);
             const endAziVal = azimuthRadToValue(selectedEntity.endAzi);
-            const unit = angleUnitsSelect.value === 'grad' ? 'g' : '°';
+            const unit = getAngleUnitLabel();
 
             let delta = normalizeAngle(selectedEntity.endAzi - selectedEntity.startAzi);
             if (delta === 0) delta = 2 * Math.PI;
@@ -2370,8 +3207,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             html += `
                 <div class="prop-group">
                     <div class="prop-group-title">Point Geometry</div>
+                    <div class="prop-row"><label>Name</label><input type="text" id="prop-point-name" value="${selectedEntity.name || ''}"></div>
                     <div class="prop-row"><label>Position X</label><input type="text" id="prop-px" value="${formatCoord(selectedEntity.x)}"></div>
                     <div class="prop-row"><label>Position Y</label><input type="text" id="prop-py" value="${formatCoord(selectedEntity.y)}"></div>
+                    <div class="prop-row"><label>Elevation Z</label><input type="text" id="prop-pz" value="${formatCoord(selectedEntity.z || 0)}"></div>
                 </div>
             `;
         }
@@ -2384,14 +3223,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 saveState();
                 callback(parseStrictFloat(e.target.value)); 
                 render(); 
+                showToast('Entity updated.', 'success', 1500);
             });
         };
 
         const colorInput = document.getElementById('prop-color');
-        if (colorInput) colorInput.addEventListener('input', (e) => { 
+        if (colorInput) colorInput.addEventListener('change', (e) => {
+            saveState();
             selectedEntity.color = e.target.value; 
             render(); 
             triggerAutoSave();
+            showToast('Entity color updated.', 'success', 1500);
         });
 
         const widthSelect = document.getElementById('prop-width');
@@ -2399,6 +3241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             saveState(); 
             selectedEntity.width = parseInt(e.target.value); 
             render(); 
+            showToast('Entity line width updated.', 'success', 1500);
         });
 
         if (selectedEntity.type === 'line') {
@@ -2420,6 +3263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     selectedEntity.y2 = selectedEntity.y1 + newLen * Math.cos(currentAziRad);
                     updatePropertiesPalette();
                     render();
+                    showToast('Entity length updated.', 'success', 1500);
                 });
             }
 
@@ -2435,6 +3279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     selectedEntity.y2 = selectedEntity.y1 + currentLen * Math.cos(newAziRad);
                     updatePropertiesPalette();
                     render();
+                    showToast('Entity azimuth updated.', 'success', 1500);
                 });
             }
 
@@ -2449,7 +3294,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     selectedEntity.y2 = ty;
                     updatePropertiesPalette();
                     render();
-                    showToast('Αντιστροφή φοράς γραμμής ολοκληρώθηκε.', 'info');
+                    showToast('Line direction reversed.', 'info');
                 });
             }
         } else if (selectedEntity.type === 'pline') {
@@ -2519,6 +3364,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         selectedEntity.points[eIdx].y = p1.y + newLen * Math.cos(currentAziRad);
                         updatePropertiesPalette();
                         render();
+                        showToast('Polyline segment length updated.', 'success', 1500);
                     });
                 }
 
@@ -2536,6 +3382,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         selectedEntity.points[eIdx].y = p1.y + currentLen * Math.cos(newAziRad);
                         updatePropertiesPalette();
                         render();
+                        showToast('Polyline segment azimuth updated.', 'success', 1500);
                     });
                 }
             }
@@ -2552,7 +3399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     selectedVertexIndex = (selectedEntity.points.length - 1 - selectedVertexIndex);
                     updatePropertiesPalette();
                     render();
-                    showToast('Αντιστροφή φοράς Polyline ολοκληρώθηκε.', 'info');
+                    showToast('Polyline direction reversed.', 'info');
                 });
             }
 
@@ -2563,6 +3410,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     selectedEntity.closed = (e.target.value === 'true');
                     updatePropertiesPalette();
                     render();
+                    showToast(`Polyline ${selectedEntity.closed ? 'closed' : 'opened'}.`, 'success', 1500);
                 });
             }
         } else if (selectedEntity.type === 'rect') {
@@ -2586,8 +3434,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             bindInput('prop-arc-start', v => { selectedEntity.startAzi = azimuthValueToRad(v); updatePropertiesPalette(); });
             bindInput('prop-arc-end', v => { selectedEntity.endAzi = azimuthValueToRad(v); updatePropertiesPalette(); });
         } else if (selectedEntity.type === 'point') {
+            const pointNameInput = document.getElementById('prop-point-name');
+            if (pointNameInput) pointNameInput.addEventListener('change', (e) => {
+                saveState();
+                selectedEntity.name = e.target.value;
+                render();
+                showToast('Point name updated.', 'success', 1500);
+            });
             bindInput('prop-px', v => selectedEntity.x = v);
             bindInput('prop-py', v => selectedEntity.y = v);
+            bindInput('prop-pz', v => selectedEntity.z = v);
         }
     }
 
@@ -2599,6 +3455,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     canvas.addEventListener('mousedown', (e) => {
+        if (e.button === 1) {
+            const now = performance.now();
+            if (now - lastMiddleClickTime < 450) {
+                lastMiddleClickTime = 0;
+                isPanning = false;
+                zoomToExtents();
+                return;
+            }
+            lastMiddleClickTime = now;
+        }
+
         if (e.button === 1 || e.buttons === 4 || e.altKey) {
             isPanning = true;
             panStart = { x: e.clientX - camera.x, y: e.clientY - camera.y };
@@ -2609,9 +3476,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const mouseScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const mouseWorld = screenToWorld(mouseScreen.x, mouseScreen.y);
 
+        // Calculate snap at mousedown for initial coordinates when drawing
+        if (e.button === 0 && currentTool !== 'select') {
+            const exclude = activeGrip ? activeGrip.entity : null;
+            activeSnap = findBestSnap(mouseScreen.x, mouseScreen.y, exclude);
+            if (activeSnap) {
+                currentMouse = { x: activeSnap.worldX, y: activeSnap.worldY };
+            } else {
+                currentMouse = mouseWorld;
+            }
+        }
+
         if (e.button === 0) {
+            if (moveCommand) {
+                const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
+                if (!moveCommand.basePoint) {
+                    moveCommand.basePoint = commandPoint;
+                    moveCommand.targetPoint = commandPoint;
+                    statusMode.innerText = 'MOVE: FINAL POINT';
+                    showToast('Specify the final point.', 'info', 2200);
+                    render();
+                } else {
+                    moveCommand.targetPoint = commandPoint;
+                    const offsetX = commandPoint.x - moveCommand.basePoint.x;
+                    const offsetY = commandPoint.y - moveCommand.basePoint.y;
+                    saveState();
+                    moveCommand.source.forEach(item => {
+                        const movedEntity = translateEntity(
+                            JSON.parse(JSON.stringify(item.state)), offsetX, offsetY
+                        );
+                        Object.keys(item.entity).forEach(key => delete item.entity[key]);
+                        Object.assign(item.entity, movedEntity);
+                    });
+                    moveCommand = null;
+                    statusMode.innerText = 'MODE: SELECT';
+                    updatePropertiesPalette();
+                    render();
+                    triggerAutoSave();
+                    showToast('Object(s) moved.', 'success', 1500);
+                }
+                return;
+            }
+
             if (currentTool === 'select') {
-                if (selectedEntity) {
+                if (pastePreview) {
+                    const pasted = getPastePreviewEntities();
+                    saveState();
+                    entities.push(...pasted);
+                    selectedEntities = new Set(pasted);
+                    selectedEntity = pasted[pasted.length - 1] || null;
+                    selectedSegmentIndex = null;
+                    pastePreview = null;
+                    updatePropertiesPalette();
+                    render();
+                    triggerAutoSave();
+                    showToast(`${pasted.length} object(s) pasted.`, 'success', 1500);
+                    return;
+                }
+
+                if (selectedEntity && selectedEntities.size <= 1) {
                     const gripHit = hitTestGrip(mouseScreen.x, mouseScreen.y, selectedEntity);
                     if (gripHit) {
                         saveState();
@@ -2632,10 +3555,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 const hit = hitTestEntity(mouseWorld, mouseScreen);
                 if (hit) {
-                    selectedEntity = hit.entity;
+                    if (e.shiftKey) {
+                        if (selectedEntities.has(hit.entity)) {
+                            selectedEntities.delete(hit.entity);
+                        } else {
+                            selectedEntities.add(hit.entity);
+                        }
+                    } else {
+                        selectedEntities = new Set([hit.entity]);
+                    }
+                    selectedEntity = selectedEntities.has(hit.entity)
+                        ? hit.entity
+                        : (selectedEntities.values().next().value || null);
                     selectedSegmentIndex = hit.segmentIndex;
+                    if (selectedEntity && selectedEntities.has(hit.entity)) {
+                        activeMove = {
+                            startWorld: mouseWorld,
+                            initialStates: new Map([...selectedEntities].map(entity => [
+                                entity,
+                                JSON.parse(JSON.stringify(entity))
+                            ])),
+                            changed: false,
+                            saved: false
+                        };
+                    }
                 } else {
-                    selectedEntity = null;
+                    selectionBoxStart = mouseWorld;
+                    selectionBoxCurrent = mouseWorld;
+                    isSelectingBox = true;
+                    if (!e.shiftKey) {
+                        selectedEntities.clear();
+                        selectedEntity = null;
+                    }
                     selectedSegmentIndex = null;
                 }
 
@@ -2652,6 +3603,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     type: 'point',
                     x: effectiveCoords.x,
                     y: effectiveCoords.y,
+                    z: 0,
                     color: document.getElementById('strokeColor').value,
                     width: parseInt(document.getElementById('lineWidth').value)
                 };
@@ -2664,7 +3616,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!isDrawing) {
                     isDrawing = true;
                     plineVertices = [effectiveCoords];
-                    showToast('Polyline: Κλικ για κορυφές | Enter/Δεξί κλικ για λήξη | "C" για κλείσιμο', 'info', 4000);
+                    showToast('Polyline: Click for vertices | Enter/Right-click to finish | "C" to close', 'info', 4000);
                 } else {
                     const lastPt = plineVertices[plineVertices.length - 1];
                     const nextPt = applyOrtho(lastPt, effectiveCoords);
@@ -2679,11 +3631,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     arcCenter = effectiveCoords;
                     arcDrawingStep = 1;
                     isDrawing = true;
-                    showToast('Arc: Κλικ για το σημείο έναρξης (Start Point & Radius)', 'info', 3000);
+                    showToast('Arc: Click the start point to set the radius.', 'info', 3000);
                 } else if (arcDrawingStep === 1) {
                     arcStartPoint = effectiveCoords;
                     arcDrawingStep = 2;
-                    showToast('Arc: Κλικ για το σημείο λήξης (End Point)', 'info', 3000);
+                    showToast('Arc: Click the end point.', 'info', 3000);
                 } else if (arcDrawingStep === 2) {
                     saveState();
                     const color = document.getElementById('strokeColor').value;
@@ -2754,6 +3706,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
 
+        if (pastePreview) {
+            pastePreview.target = screenToWorld(sx, sy);
+            render();
+            return;
+        }
+
+        if (moveCommand && moveCommand.basePoint) {
+            moveCommand.targetPoint = getCommandPoint(sx, sy);
+            currentMouse = moveCommand.targetPoint;
+            statusCoords.innerText = `X: ${formatCoord(currentMouse.x)} | Y: ${formatCoord(currentMouse.y)}`;
+            render();
+            return;
+        }
+
+        if (isSelectingBox) {
+            selectionBoxCurrent = screenToWorld(sx, sy);
+            render();
+            return;
+        }
+
+        if (activeMove) {
+            const currentWorld = screenToWorld(sx, sy);
+            applyObjectMove(activeMove, currentWorld);
+            if (activeMove.changed && !activeMove.saved) {
+                saveState();
+                activeMove.saved = true;
+            }
+            render();
+            return;
+        }
+
         if (selectedEntity && !activeGrip && currentTool === 'select') {
             hoveredGrip = hitTestGrip(sx, sy, selectedEntity);
             canvas.style.cursor = hoveredGrip ? 'pointer' : 'default';
@@ -2761,7 +3744,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             canvas.style.cursor = 'crosshair';
         }
 
-        const exclude = activeGrip ? activeGrip.entity : null;
+        // During drawing/snapping, don't exclude any entities - we want snap available to ALL existing objects
+        let exclude = null;
+        if (activeGrip) {
+            exclude = activeGrip.entity;
+        }
         activeSnap = findBestSnap(sx, sy, exclude);
 
         if (activeSnap) {
@@ -2795,32 +3782,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             applyGripModification(activeGrip, targetPt);
         }
 
-        if (isDrawing || activeSnap || activeGrip || hoveredGrip) render();
+        if (isDrawing || activeSnap || activeGrip || hoveredGrip || isSelectingBox) render();
     });
 
-    window.addEventListener('mouseup', () => {
-        if (isPanning) isPanning = false;
+    window.addEventListener('mouseup', (e) => {
+        if (isPanning) {
+            isPanning = false;
+            triggerAutoSave();
+        }
+        if (isSelectingBox) {
+            const rect = canvas.getBoundingClientRect();
+            selectionBoxCurrent = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+            const boxStart = selectionBoxStart;
+            const boxEnd = selectionBoxCurrent;
+            const boxMatches = entities.filter(entity => isEntityInSelectionBox(entity, boxStart, boxEnd));
+            if (e.shiftKey) {
+                boxMatches.forEach(entity => selectedEntities.add(entity));
+            } else {
+                selectedEntities = new Set(boxMatches);
+            }
+            selectedEntity = boxMatches[boxMatches.length - 1] || selectedEntities.values().next().value || null;
+            selectedSegmentIndex = null;
+            isSelectingBox = false;
+            selectionBoxStart = null;
+            selectionBoxCurrent = null;
+            updatePropertiesPalette();
+            render();
+            return;
+        }
+        if (activeMove) {
+            const moveChanged = activeMove.changed;
+            activeMove = null;
+            if (moveChanged) {
+                triggerAutoSave();
+                showToast('Object moved.', 'success', 1200);
+            }
+            render();
+            return;
+        }
         if (activeGrip) {
             activeGrip = null;
             statusMode.innerText = 'MODE: SELECT';
             triggerAutoSave();
             render();
+            showToast('Entity geometry updated.', 'success', 1500);
+        }
+    });
+
+    canvas.addEventListener('dblclick', (e) => {
+        if (e.button === 1 || e.which === 2) {
+            e.preventDefault();
+            zoomToExtents();
         }
     });
 
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+        const zoomFactor = e.deltaY < 0 ? 1.30 : 0.70;
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
         const worldBefore = screenToWorld(mouseX, mouseY);
-        camera.zoom = Math.max(0.05, Math.min(camera.zoom * zoomFactor, 30));
+        camera.zoom = Math.max(0.05, Math.min(camera.zoom * zoomFactor, 100));
         camera.x = mouseX - canvas.width / 2 - worldBefore.x * camera.zoom;
         camera.y = mouseY - canvas.height / 2 + worldBefore.y * camera.zoom;
 
+        localStorage.setItem('cad_zoom', String(camera.zoom));
         statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
+        triggerAutoSave();
         render();
     }, { passive: false });
 
@@ -2830,13 +3860,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         updatePropertiesPalette();
         render();
         triggerAutoSave();
-        showToast(`Μονάδα γωνιών: ${val === 'grad' ? 'Grads (400g)' : 'Degrees (360°)'}`, 'info');
+        const unitLabel = val === 'grad' ? 'Grads (400g)' : (val === 'rad' ? 'Radians (2π)' : 'Degrees (360°)');
+        showToast(`Angle unit: ${unitLabel}`, 'info');
+    });
+
+    lineWidthSelect.addEventListener('change', () => {
+        triggerAutoSave();
     });
 
     // DXF Export Button Event (Full Payload with Units)
     document.getElementById('btn-export-dxf').addEventListener('click', () => {
         if (!entities || entities.length === 0) {
-            showToast('Δεν υπάρχουν οντότητες προς εξαγωγή.', 'warning');
+            showToast('There are no entities to export.', 'warning');
             return;
         }
 
@@ -2863,10 +3898,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         form.submit();
         document.body.removeChild(form);
 
-        showToast('Το αρχείο DXF (AutoCAD 2007) δημιουργήθηκε!', 'success');
+        showToast('AutoCAD 2007 DXF file created.', 'success');
     });
 
     window.addEventListener('keydown', (e) => {
+        const editingText = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+        if ((e.key === 'm' || e.key === 'M') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startMoveCommand();
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            selectedEntities = new Set(entities);
+            selectedEntity = entities[entities.length - 1] || null;
+            selectedSegmentIndex = null;
+            updatePropertiesPalette();
+            render();
+            showToast(`${selectedEntities.size} object(s) selected.`, 'info', 1500);
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && !editingText) {
+            if (selectedEntities.size) {
+                clipboardEntities = JSON.parse(JSON.stringify([...selectedEntities]));
+                e.preventDefault();
+                showToast(`${clipboardEntities.length} object(s) copied.`, 'info', 1500);
+            }
+            return;
+        }
+
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && !editingText) {
+            if (clipboardEntities.length) {
+                e.preventDefault();
+                pastePreview = {
+                    source: JSON.parse(JSON.stringify(clipboardEntities)),
+                    anchor: getEntitiesCenter(clipboardEntities),
+                    target: { x: currentMouse.x, y: currentMouse.y }
+                };
+                render();
+                showToast('Paste preview active. Click to place or press Escape to cancel.', 'info', 2500);
+            }
+            return;
+        }
+
         if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
             e.preventDefault();
             executeUndo();
@@ -2884,13 +3960,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const chk = document.getElementById('osnapToggle');
             chk.checked = !chk.checked;
             document.getElementById('status-osnap').innerText = `OSNAP: ${chk.checked ? 'ON' : 'OFF'}`;
-            showToast(`OSNAP: ${chk.checked ? 'Ενεργό' : 'Απενεργοποιημένο'}`, chk.checked ? 'success' : 'warning', 1800);
+            showToast(`OSNAP: ${chk.checked ? 'ON' : 'OFF'}`, chk.checked ? 'success' : 'warning', 1800);
         } else if (e.key === 'F8') {
             e.preventDefault();
             const chk = document.getElementById('orthoToggle');
             chk.checked = !chk.checked;
             document.getElementById('status-ortho').innerText = `ORTHO: ${chk.checked ? 'ON' : 'OFF'}`;
-            showToast(`ORTHO: ${chk.checked ? 'Ενεργό' : 'Απενεργοποιημένο'}`, chk.checked ? 'success' : 'warning', 1800);
+            showToast(`ORTHO: ${chk.checked ? 'ON' : 'OFF'}`, chk.checked ? 'success' : 'warning', 1800);
         } else if (e.key === 'Enter') {
             if (currentTool === 'pline' && isDrawing) {
                 finishPline(false);
@@ -2900,6 +3976,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 finishPline(true);
             }
         } else if (e.key === 'Escape') {
+            if (moveCommand) {
+                moveCommand = null;
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Move cancelled.', 'info', 1200);
+                return;
+            }
+            if (pastePreview) {
+                pastePreview = null;
+                render();
+                showToast('Paste cancelled.', 'info', 1200);
+                return;
+            }
             if (activeGrip) {
                 Object.assign(activeGrip.entity, activeGrip.initialState);
                 activeGrip = null;
@@ -2912,20 +4001,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             arcDrawingStep = 0;
             plineVertices = [];
             selectedEntity = null;
+            selectedEntities.clear();
             selectedSegmentIndex = null;
             selectedVertexIndex = 0;
             switchToSelectMode(null);
-            showToast('Ακύρωση ενέργειας / Αποεπιλογή', 'info', 1500);
+            showToast('Action cancelled / Selection cleared.', 'info', 1500);
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (selectedEntity && document.activeElement.tagName !== 'INPUT') {
+            if (selectedEntities.size && !editingText) {
                 saveState();
-                entities = entities.filter(ent => ent !== selectedEntity);
+                entities = entities.filter(ent => !selectedEntities.has(ent));
+                const deletedCount = selectedEntities.size;
                 selectedEntity = null;
+                selectedEntities.clear();
                 selectedSegmentIndex = null;
                 selectedVertexIndex = 0;
                 updatePropertiesPalette();
                 render();
-                showToast('Το αντικείμενο διαγράφηκε.', 'warning');
+                showToast(`${deletedCount} object(s) deleted.`, 'warning');
             }
         }
     });
@@ -2944,53 +4036,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             activeGrip = null;
             statusMode.innerText = `MODE: ${currentTool.toUpperCase()}`;
             render();
-            showToast(`Εργαλείο: ${btn.innerText}`, 'info', 1500);
+            showToast(`Tool: ${btn.innerText}`, 'info', 1500);
         });
     });
 
-    document.getElementById('btn-undo').addEventListener('click', executeUndo);
-    document.getElementById('btn-redo').addEventListener('click', executeRedo);
+    const pointImportModal = document.getElementById('point-import-modal');
+    const pointImportInput = document.getElementById('point-import-input');
+    const closePointImport = () => {
+        pointImportModal.classList.remove('open');
+        pointImportInput.value = '';
+    };
 
-    document.getElementById('btn-delete').addEventListener('click', () => {
-        if (selectedEntity) {
-            saveState();
-            entities = entities.filter(ent => ent !== selectedEntity);
-            selectedEntity = null;
-            selectedSegmentIndex = null;
-            selectedVertexIndex = 0;
-            updatePropertiesPalette();
-            render();
-            showToast('Το αντικείμενο διαγράφηκε.', 'warning');
-        } else {
-            showToast('Δεν υπάρχει επιλεγμένο αντικείμενο προς διαγραφή.', 'warning');
-        }
+    document.getElementById('btn-import-points').addEventListener('click', () => {
+        pointImportModal.classList.add('open');
+        pointImportInput.focus();
     });
+    document.getElementById('btn-generate-contours').addEventListener('click', generateContours);
+    document.getElementById('btn-cancel-point-import').addEventListener('click', closePointImport);
+    pointImportModal.addEventListener('click', (event) => {
+        if (event.target === pointImportModal) closePointImport();
+    });
+    document.getElementById('btn-apply-point-import').addEventListener('click', () => {
+        const lines = pointImportInput.value.split(/\r?\n/);
+        const importedPoints = [];
+        const invalidLines = [];
+        const color = document.getElementById('strokeColor').value;
+        const width = parseInt(document.getElementById('lineWidth').value);
 
-    document.getElementById('btn-clear').addEventListener('click', () => {
-        if (entities.length === 0) {
-            showToast('Το σχέδιο είναι ήδη κενό.', 'info');
-            return;
+        lines.forEach((line, index) => {
+            if (!line.trim()) return;
+            const values = line.trim().split(/[,\t]+/).map(value => value.trim());
+            if (values.length !== 2 && values.length !== 3) {
+                invalidLines.push(index + 1);
+                return;
+            }
+            const coordinates = values.map(value => parseStrictFloat(value, NaN));
+            if (coordinates.some(value => !Number.isFinite(value))) {
+                invalidLines.push(index + 1);
+                return;
+            }
+            importedPoints.push({
+                type: 'point',
+                x: coordinates[0],
+                y: coordinates[1],
+                z: coordinates[2] ?? 0,
+                color,
+                width
+            });
+        });
+
+        if (invalidLines.length) {
+            showToast(`Invalid point rows: ${invalidLines.join(', ')}`, 'error', 3500);
         }
-        showToast('Καθαρισμός όλων των αντικειμένων;', 'warning', 5000);
+        if (!importedPoints.length) return;
+
         saveState();
-        entities = [];
-        selectedEntity = null;
+        entities.push(...importedPoints);
+        closePointImport();
+        selectedEntities = new Set(importedPoints);
+        selectedEntity = importedPoints[importedPoints.length - 1];
         selectedSegmentIndex = null;
-        selectedVertexIndex = 0;
-        plineVertices = [];
-        isDrawing = false;
-        arcCenter = null;
-        arcStartPoint = null;
-        arcDrawingStep = 0;
         updatePropertiesPalette();
         render();
-        showToast('Όλο το σχέδιο καθαρίστηκε.', 'success');
+        showToast(`${importedPoints.length} point(s) added.`, 'success', 2000);
     });
+
+    document.getElementById('btn-move').addEventListener('click', startMoveCommand);
 
     function autoLoad() {
         const formData = new FormData();
         formData.append('action', 'load');
-        fetch('cad.php', { method: 'POST', body: formData })
+        fetch(apiEndpoint, { method: 'POST', body: formData })
             .then(res => res.json())
             .then(res => {
                 if (res.status === 'success' && res.data) {
@@ -3002,13 +4118,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             angleUnitsSelect.value = res.data.angleUnit;
                             localStorage.setItem('cad_angle_unit', res.data.angleUnit);
                         }
+                        if (Number.isFinite(Number(res.data.zoom))) {
+                            camera.zoom = Math.max(0.05, Math.min(Number(res.data.zoom), 100));
+                            localStorage.setItem('cad_zoom', String(camera.zoom));
+                            statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
+                        }
+                        if (Number.isFinite(Number(res.data.propertiesWidth))) {
+                            const propertiesWidth = Math.max(240, Math.min(600, Number(res.data.propertiesWidth)));
+                            propertiesPalette.style.width = `${propertiesWidth}px`;
+                            propertiesPalette.style.flexBasis = `${propertiesWidth}px`;
+                        }
+                        resize();
+                        if (Number.isFinite(Number(res.data.viewCenterX)) && Number.isFinite(Number(res.data.viewCenterY))) {
+                            let viewCenterX = Number(res.data.viewCenterX);
+                            if (Number(res.data.viewCenterVersion) !== 2) {
+                                viewCenterX -= canvas.width / (2 * camera.zoom);
+                            }
+                            camera.x = -viewCenterX * camera.zoom;
+                            camera.y = Number(res.data.viewCenterY) * camera.zoom;
+                        }
+                        if (['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
+                            lineWidthSelect.value = String(res.data.lineWidth);
+                        }
                     }
-                    render();
+                    resize();
                 }
             })
             .catch(() => {});
     }
 
+    statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
     resize();
     autoLoad();
 })();
