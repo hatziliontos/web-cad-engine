@@ -30,6 +30,9 @@ The following tools are supported:
 - `Arc`: set the center, start point, and end point with three clicks.
 - `Ellipse`: set the center with one click and the two radii with a second click.
 - `Point`: create a point with one click.
+- `Generate 1 m Contours`: build contour polylines at 1 m elevation intervals
+  from the available points using their X, Y, and Z values. Re-running the
+  command replaces only the previously generated contour polylines.
 
 Drawing uses clicks as the primary creation method rather than drag gestures.
 Pan the viewport with the middle mouse button or `Alt`, and zoom with the mouse
@@ -53,6 +56,11 @@ properties in the properties palette. Depending on the entity type, the palette
 also displays length, area, perimeter, radius, azimuth, vertices, and polyline
 angles. Grips support moving, stretching, and changing radii or ellipse axes.
 
+Points have editable `Name`, `Position X`, `Position Y`, and `Elevation Z`
+properties. Each point is displayed on the canvas as `name:elevation`.
+Generated contour polylines use the interpolated elevation as their polyline
+elevation property.
+
 `Undo`/`Redo` and the `Ctrl+Z`/`Ctrl+Y` shortcuts retain up to 50 states.
 `Delete` or `Backspace` removes the selected entity, while `Clear` empties the
 entire drawing.
@@ -68,7 +76,15 @@ The file format is:
 ```json
 {
   "angleUnit": "deg",
-  "entities": []
+  "entities": [
+    {
+      "type": "point",
+      "name": "P1",
+      "x": 100,
+      "y": 200,
+      "z": 12.5
+    }
+  ]
 }
 ```
 
