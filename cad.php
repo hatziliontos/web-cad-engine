@@ -1,8 +1,60 @@
 <?php
 // cad.php - Complete Web CAD Engine with Strict AutoCAD 2007 (AC1021) Header & DimStyle Compliance
-$dataFile = __DIR__ . '/cad_drawing.json';
 
-// Helper: RGB Hex to AutoCAD Color Index (ACI)
+// Drawing file selection, revision tracking, and collaborative-presence identity.
+$defaultFileName = 'cad_drawing.json';
+
+function sanitizeDrawingFileName($fileName) {
+    $fileName = trim((string)$fileName);
+    if ($fileName === '' || !preg_match('/^[a-zA-Z0-9_-]+(?:\.json)?$/', $fileName)) {
+        return null;
+    }
+    return substr($fileName, -5) === '.json' ? $fileName : $fileName . '.json';
+}
+
+function getDrawingFileName($fallback) {
+    $requestedName = $_POST['file'] ?? ($_COOKIE['cad_file'] ?? $fallback);
+    return sanitizeDrawingFileName($requestedName) ?? $fallback;
+}
+
+function getDrawingRevision($filePath) {
+    if (!file_exists($filePath)) {
+        return null;
+    }
+    return (string)filemtime($filePath) . '-' . (string)filesize($filePath);
+}
+
+function getDrawingEntityRevision($filePath) {
+    if (!file_exists($filePath)) {
+        return null;
+    }
+    $drawing = json_decode(file_get_contents($filePath), true);
+    if (!is_array($drawing)) {
+        return null;
+    }
+    return hash('sha256', json_encode($drawing['entities'] ?? $drawing, JSON_UNESCAPED_SLASHES));
+}
+
+$dataFile = __DIR__ . '/' . getDrawingFileName($defaultFileName);
+$presenceFile = __DIR__ . '/cad_presence.json';
+
+function sanitizeNickname($nickname) {
+    $nickname = trim((string)$nickname);
+    if ($nickname === '' || !preg_match('/^[\p{L}\p{N} _-]{1,24}$/u', $nickname)) {
+        return null;
+    }
+    return $nickname;
+}
+
+function getUserId($clientId = '') {
+    $userId = preg_match('/^[a-f0-9]{32}$/', $clientId) ? $clientId : '';
+    if (!preg_match('/^[a-f0-9]{32}$/', $userId)) {
+        $userId = bin2hex(random_bytes(16));
+    }
+    return $userId;
+}
+
+// DXF export helpers convert editor colors and geometry into AutoCAD-compatible data.
 function hexToACI($hex) {
     $hex = ltrim($hex, '#');
     if (strlen($hex) === 3) {
@@ -81,8 +133,89 @@ function getDXFGridBounds($entities) {
     return is_infinite($bounds['minX']) ? null : $bounds;
 }
 
-// AutoCAD 2007 (AC1021) DXF Generator
-function generateDXF2007($entities, $angleUnit = 'deg') {
+function getDXFHatchBoundaryLoops($entity) {
+    $hatch = $entity['hatch'] ?? null;
+    if (!$hatch || !is_array($hatch)) return [];
+    $distance = abs((float)($hatch['distance'] ?? 0));
+    if ($distance <= 0) return [];
+    $sideSign = ((float)($hatch['sideSign'] ?? 1)) < 0 ? -1 : 1;
+    $type = $entity['type'] ?? '';
+
+    $sourcePoints = [];
+    if ($type === 'line') {
+        $sourcePoints = [
+            ['x' => (float)$entity['x1'], 'y' => (float)$entity['y1']],
+            ['x' => (float)$entity['x2'], 'y' => (float)$entity['y2']]
+        ];
+    } elseif ($type === 'pline' && empty($entity['closed'])) {
+        $sourcePoints = array_map(static fn($point) => ['x' => (float)$point['x'], 'y' => (float)$point['y']], $entity['points'] ?? []);
+    }
+    if ($sourcePoints) {
+        $loops = [];
+        for ($index = 0; $index < count($sourcePoints) - 1; $index++) {
+            $start = $sourcePoints[$index];
+            $end = $sourcePoints[$index + 1];
+            $dx = $end['x'] - $start['x'];
+            $dy = $end['y'] - $start['y'];
+            $length = hypot($dx, $dy);
+            if ($length < 1e-9) continue;
+            $normalX = -$dy / $length * $distance * $sideSign;
+            $normalY = $dx / $length * $distance * $sideSign;
+            $loops[] = [$start, $end,
+                ['x' => $end['x'] + $normalX, 'y' => $end['y'] + $normalY],
+                ['x' => $start['x'] + $normalX, 'y' => $start['y'] + $normalY]
+            ];
+        }
+        return $loops;
+    }
+
+    if ($type === 'rect') {
+        $x1 = (float)$entity['x'];
+        $y1 = (float)$entity['y'];
+        $x2 = $x1 + (float)$entity['w'];
+        $y2 = $y1 + (float)$entity['h'];
+        $minX = min($x1, $x2); $maxX = max($x1, $x2);
+        $minY = min($y1, $y2); $maxY = max($y1, $y2);
+        $inside = $sideSign < 0;
+        $outer = [[
+            'x' => $minX - ($inside ? 0 : $distance), 'y' => $minY - ($inside ? 0 : $distance)
+        ], [
+            'x' => $maxX + ($inside ? 0 : $distance), 'y' => $minY - ($inside ? 0 : $distance)
+        ], [
+            'x' => $maxX + ($inside ? 0 : $distance), 'y' => $maxY + ($inside ? 0 : $distance)
+        ], [
+            'x' => $minX - ($inside ? 0 : $distance), 'y' => $maxY + ($inside ? 0 : $distance)
+        ]];
+        $inner = [[['x' => $minX, 'y' => $minY], ['x' => $maxX, 'y' => $minY], ['x' => $maxX, 'y' => $maxY], ['x' => $minX, 'y' => $maxY]]];
+        return $inside ? [$inner[0], $outer] : [$outer, $inner[0]];
+    }
+
+    if ($type === 'circle' || $type === 'ellipse') {
+        $cx = (float)$entity['cx']; $cy = (float)$entity['cy'];
+        $rx = $type === 'circle' ? (float)$entity['r'] : abs((float)$entity['rx']);
+        $ry = $type === 'circle' ? (float)$entity['r'] : abs((float)$entity['ry']);
+        $outerScale = $sideSign < 0 ? 0 : $distance;
+        $innerScale = $sideSign < 0 ? -$distance : 0;
+        $makeLoop = static function ($scale) use ($cx, $cy, $rx, $ry) {
+            $points = [];
+            for ($index = 0; $index < 64; $index++) {
+                $angle = 2 * M_PI * $index / 64;
+                $points[] = ['x' => $cx + ($rx + $scale) * cos($angle), 'y' => $cy + ($ry + $scale) * sin($angle)];
+            }
+            return $points;
+        };
+        return [$makeLoop($outerScale), $makeLoop($innerScale)];
+    }
+
+    if ($type === 'pline' && !empty($entity['closed'])) {
+        $points = array_map(static fn($point) => ['x' => (float)$point['x'], 'y' => (float)$point['y']], $entity['points'] ?? []);
+        return $points ? [$points] : [];
+    }
+    return [];
+}
+
+// AutoCAD 2007 (AC1021) DXF generator.
+function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $dxf = [];
     $nl = "\r\n";
 
@@ -605,6 +738,56 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
                 $dxf[] = "20{$nl}" . sprintf('%.4f', (float)$ent['y']);
                 $dxf[] = "30{$nl}" . sprintf('%.4f', (float)($ent['z'] ?? 0));
             }
+
+            $hatchLoops = getDXFHatchBoundaryLoops($ent);
+            if ($hatchLoops) {
+                $hatch = is_array($ent['hatch'] ?? null) ? $ent['hatch'] : [];
+                $hatchColor = hexToACI($hatch['color'] ?? ($ent['color'] ?? '#ffffff'));
+                $hatchHandle = dechex($hNext++);
+                $firstPoint = $hatchLoops[0][0];
+                $dxf[] = "0{$nl}HATCH";
+                $dxf[] = "5{$nl}{$hatchHandle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
+                $dxf[] = "100{$nl}AcDbEntity";
+                $dxf[] = "8{$nl}0";
+                $dxf[] = "62{$nl}{$hatchColor}";
+                $dxf[] = "100{$nl}AcDbHatch";
+                $dxf[] = "10{$nl}" . sprintf('%.4f', $firstPoint['x']);
+                $dxf[] = "20{$nl}" . sprintf('%.4f', $firstPoint['y']);
+                $dxf[] = "30{$nl}0.0000";
+                $dxf[] = "210{$nl}0.0";
+                $dxf[] = "220{$nl}0.0";
+                $dxf[] = "230{$nl}1.0";
+                $dxf[] = "2{$nl}ANSI31";
+                $dxf[] = "70{$nl}0";
+                $dxf[] = "71{$nl}0";
+                $dxf[] = "91{$nl}" . count($hatchLoops);
+                foreach ($hatchLoops as $loop) {
+                    if (count($loop) < 3) continue;
+                    $dxf[] = "92{$nl}2";
+                    $dxf[] = "72{$nl}0";
+                    $dxf[] = "73{$nl}1";
+                    $dxf[] = "93{$nl}" . count($loop);
+                    foreach ($loop as $point) {
+                        $dxf[] = "10{$nl}" . sprintf('%.4f', $point['x']);
+                        $dxf[] = "20{$nl}" . sprintf('%.4f', $point['y']);
+                    }
+                    $dxf[] = "97{$nl}0";
+                }
+                $dxf[] = "75{$nl}0";
+                $dxf[] = "76{$nl}1";
+                $dxf[] = "52{$nl}" . sprintf('%.4f', (float)($hatch['angle'] ?? 45));
+                $dxf[] = "41{$nl}" . sprintf('%.4f', max(0.0001, (float)($hatch['spacing'] ?? 10)));
+                $dxf[] = "77{$nl}0";
+                $dxf[] = "78{$nl}1";
+                $dxf[] = "53{$nl}" . sprintf('%.4f', (float)($hatch['angle'] ?? 45));
+                $dxf[] = "43{$nl}0.0";
+                $dxf[] = "44{$nl}0.0";
+                $dxf[] = "45{$nl}1.0";
+                $dxf[] = "46{$nl}1.0";
+                $dxf[] = "79{$nl}0";
+                $dxf[] = "98{$nl}0";
+            }
         }
     }
 
@@ -617,7 +800,7 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
         $gridMaxY = ceil($gridBounds['maxY'] / $gridStep) * $gridStep;
         $gridHandle = $hNext++;
         $gridColor = 8;
-        $labelHeight = max(2.0, $gridStep * 0.16);
+        $labelHeight = 0.0025 * max(1, (float)$printScale);
         $labelOffset = $labelHeight * 1.5;
 
         for ($x = $gridMinX; $x <= $gridMaxX; $x += $gridStep) {
@@ -886,18 +1069,22 @@ function generateDXF2007($entities, $angleUnit = 'deg') {
     return implode($nl, $dxf);
 }
 
-// Backend Handlers
+// JSON API: drawing storage, active-user presence, drawing list, rename, and DXF download.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'save') {
         header('Content-Type: application/json; charset=utf-8');
         $jsonContent = $_POST['data'] ?? '{}';
-        // Decode and re-encode with formatting
         $decoded = json_decode($jsonContent, true);
+        if (!is_array($decoded) || json_last_error() !== JSON_ERROR_NONE) {
+            echo json_encode(['status' => 'error', 'message' => 'Invalid drawing data.']);
+            exit;
+        }
         $formatted = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        if (file_put_contents($dataFile, $formatted)) {
-            echo json_encode(['status' => 'success']);
+        if (file_put_contents($dataFile, $formatted, LOCK_EX) !== false) {
+            setcookie('cad_file', basename($dataFile), time() + 31536000, '', '', false, true);
+            echo json_encode(['status' => 'success', 'fileName' => basename($dataFile, '.json'), 'revision' => getDrawingRevision($dataFile), 'entityRevision' => getDrawingEntityRevision($dataFile)]);
         } else {
             echo json_encode(['status' => 'error', 'message' => 'Failed to write file.']);
         }
@@ -907,9 +1094,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'load') {
         header('Content-Type: application/json; charset=utf-8');
         if (file_exists($dataFile)) {
-            echo json_encode(['status' => 'success', 'data' => json_decode(file_get_contents($dataFile), true)]);
+            setcookie('cad_file', basename($dataFile), time() + 31536000, '', '', false, true);
+            echo json_encode(['status' => 'success', 'fileName' => basename($dataFile, '.json'), 'revision' => getDrawingRevision($dataFile), 'entityRevision' => getDrawingEntityRevision($dataFile), 'data' => json_decode(file_get_contents($dataFile), true)]);
         } else {
             echo json_encode(['status' => 'error', 'message' => 'No saved drawing found.']);
+        }
+        exit;
+    }
+
+    if ($action === 'check') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['status' => 'success', 'fileName' => basename($dataFile, '.json'), 'revision' => getDrawingRevision($dataFile), 'entityRevision' => getDrawingEntityRevision($dataFile)]);
+        exit;
+    }
+
+    if ($action === 'presence') {
+        header('Content-Type: application/json; charset=utf-8');
+        $userId = getUserId($_POST['clientId'] ?? '');
+        $nickname = sanitizeNickname($_POST['nickname'] ?? '') ?? strtoupper(substr($userId, 0, 4));
+        $presenceHandle = fopen($presenceFile, 'c+');
+        if ($presenceHandle === false || !flock($presenceHandle, LOCK_EX)) {
+            if ($presenceHandle !== false) fclose($presenceHandle);
+            echo json_encode(['status' => 'error', 'message' => 'Presence is temporarily unavailable.']);
+            exit;
+        }
+        rewind($presenceHandle);
+        $presence = json_decode(stream_get_contents($presenceHandle), true);
+        if (!is_array($presence)) {
+            $presence = [];
+        }
+        $now = time();
+        foreach ($presence as $id => $user) {
+            if (($user['file'] ?? '') !== basename($dataFile) || ($user['lastSeen'] ?? 0) < $now - 15) {
+                unset($presence[$id]);
+            }
+        }
+        foreach ($presence as $id => $user) {
+            if ($id !== $userId && ($user['nickname'] ?? '') === $nickname) {
+                flock($presenceHandle, LOCK_UN);
+                fclose($presenceHandle);
+                echo json_encode(['status' => 'error', 'message' => 'This username is already in use.']);
+                exit;
+            }
+        }
+        $presence[$userId] = ['nickname' => $nickname, 'file' => basename($dataFile), 'lastSeen' => $now];
+        rewind($presenceHandle);
+        ftruncate($presenceHandle, 0);
+        fwrite($presenceHandle, json_encode($presence));
+        fflush($presenceHandle);
+        flock($presenceHandle, LOCK_UN);
+        fclose($presenceHandle);
+        $users = array_map(static fn($user) => $user['nickname'], $presence);
+        sort($users, SORT_NATURAL | SORT_FLAG_CASE);
+        echo json_encode(['status' => 'success', 'users' => $users]);
+        exit;
+    }
+
+    if ($action === 'list') {
+        header('Content-Type: application/json; charset=utf-8');
+        $drawings = [];
+        foreach (glob(__DIR__ . '/*.json') ?: [] as $filePath) {
+            $fileName = basename($filePath, '.json');
+            if ($fileName === 'cad_presence') {
+                continue;
+            }
+            if (sanitizeDrawingFileName($fileName . '.json') === $fileName . '.json') {
+                $drawings[] = $fileName;
+            }
+        }
+        sort($drawings, SORT_NATURAL | SORT_FLAG_CASE);
+        echo json_encode(['status' => 'success', 'files' => $drawings, 'activeFile' => basename($dataFile, '.json')]);
+        exit;
+    }
+
+    if ($action === 'rename') {
+        header('Content-Type: application/json; charset=utf-8');
+        $newFileName = sanitizeDrawingFileName($_POST['newFile'] ?? '');
+        $oldFileName = basename($dataFile);
+        $newFilePath = $newFileName ? __DIR__ . '/' . $newFileName : null;
+        if ($newFilePath === null) {
+            echo json_encode(['status' => 'error', 'message' => 'Use only letters, numbers, hyphens, or underscores.']);
+        } elseif ($newFileName === $oldFileName) {
+            echo json_encode(['status' => 'success', 'fileName' => basename($newFileName, '.json')]);
+        } elseif (file_exists($newFilePath)) {
+            echo json_encode(['status' => 'error', 'message' => 'A drawing with that name already exists.']);
+        } elseif (!file_exists($dataFile) || !rename($dataFile, $newFilePath)) {
+            echo json_encode(['status' => 'error', 'message' => 'Failed to rename drawing.']);
+        } else {
+            setcookie('cad_file', $newFileName, time() + 31536000, '', '', false, true);
+            echo json_encode(['status' => 'success', 'fileName' => basename($newFileName, '.json')]);
         }
         exit;
     }
@@ -920,6 +1193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $entities = [];
         $angleUnit = 'deg';
+        $printScale = max(1, (float)($_POST['printScale'] ?? 100));
         if (is_array($parsed)) {
             if (isset($parsed['entities']) && is_array($parsed['entities'])) {
                 $entities = $parsed['entities'];
@@ -929,10 +1203,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        $dxfContent = generateDXF2007($entities, $angleUnit);
+        $dxfContent = generateDXF2007($entities, $angleUnit, $printScale);
 
         header('Content-Type: application/dxf');
-        header('Content-Disposition: attachment; filename="drawing_2007.dxf"');
+        header('Content-Disposition: attachment; filename="' . basename($dataFile, '.json') . '.dxf"');
         header('Content-Length: ' . strlen($dxfContent));
         header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Pragma: no-cache');
@@ -964,16 +1238,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; height: 100vh; background: var(--bg-dark); color: var(--text-main); overflow: hidden; }
 
         #toolbar {
+            min-height: 48px;
             height: 48px;
+            flex: 0 0 48px;
             background: var(--bg-toolbar);
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             padding: 0 12px;
             gap: 8px;
             z-index: 10;
         }
-        .btn-group { display: flex; gap: 4px; border-right: 1px solid var(--border-color); padding-right: 8px; align-items: center; }
+        .btn-group { display: flex; gap: 4px; border-right: 1px solid var(--border-color); padding: 6px 8px 6px 0; align-items: center; }
         button, select, input[type="text"], input[type="color"] {
             background: #3c3c3c;
             color: #fff;
@@ -1016,6 +1293,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flex-direction: column;
             font-size: 12px;
         }
+        #properties-palette.collapsed {
+            width: 0 !important;
+            min-width: 0;
+            flex-basis: 0 !important;
+            border-left: 0;
+            overflow: hidden;
+        }
+        #properties-palette.collapsed .panel-header,
+        #properties-palette.collapsed .panel-content {
+            display: none;
+        }
+        #toggle-properties-float {
+            display: none;
+            position: absolute;
+            right: 8px;
+            top: 8px;
+            z-index: 3;
+        }
         #properties-resizer {
             width: 6px;
             flex: 0 0 6px;
@@ -1036,6 +1331,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-bottom: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
+        }
+        #toggle-properties {
+            border: 0;
+            background: transparent;
+            padding: 0 3px;
+            color: var(--text-main);
+            font-size: 14px;
+            line-height: 1;
         }
         .panel-content { flex: 1; overflow-y: auto; padding: 10px; }
         .prop-group { margin-bottom: 15px; }
@@ -1098,7 +1401,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 0 12px;
             font-size: 11px;
             font-family: 'Consolas', monospace;
+            gap: 12px;
+            overflow: hidden;
         }
+        #statusbar > div { min-width: 0; white-space: nowrap; }
+        #statusbar > div:last-child { display: flex; align-items: center; gap: 4px; overflow-x: auto; }
+        #active-users { flex: 0 0 auto; color: #fff; }
         .osnap-badge {
             background: rgba(0,0,0,0.25);
             padding: 2px 6px;
@@ -1170,6 +1478,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font: 12px Consolas, monospace;
         }
         .point-import-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+        @media (max-width: 760px) {
+            #toolbar { align-items: stretch; padding: 0 8px; gap: 4px; height: auto; flex-basis: auto; overflow: visible; }
+            .btn-group { border-right: 0; border-bottom: 1px solid var(--border-color); padding: 4px 4px 4px 0; }
+            #toolbar .btn-group:last-child { flex: 1 1 100%; flex-wrap: wrap; }
+            #drawing-file-name { min-width: 110px; flex: 1 1 130px; }
+            #drawing-file-select { min-width: 130px; flex: 1 1 150px; }
+            #main-container { min-height: 0; }
+            #properties-palette { width: 280px; min-width: 220px; }
+        }
     </style>
 </head>
 <body>
@@ -1187,6 +1504,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="btn-import-points" class="icon-btn" title="Import Points"><svg viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M4 7V4h5M20 7V4h-5"/></svg><span class="sr-only">Import Points</span></button>
         <button id="btn-generate-contours" class="icon-btn" title="Generate 1 m Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate 1 m Contours</span></button>
         <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
+        <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M5 17V7h10"/><path d="M9 21h10V11"/><path d="M5 17l4 4M15 7l4 4"/></svg><span class="sr-only">Offset</span></button>
+        <button id="btn-dimension" class="icon-btn" title="Distance dimension (D)"><svg viewBox="0 0 24 24"><path d="M5 5v14M19 5v14M8 9l-3-4-3 4M16 15l3 4 3-4"/><path d="M5 12h14"/></svg><span class="sr-only">Distance dimension</span></button>
+        <button id="btn-copy-jpg" class="icon-btn" title="Copy selection as JPG"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="9" cy="9" r="1.5"/><path d="M4 16l4-4 3 3 2-2 7 6"/></svg><span class="sr-only">Copy selection as JPG</span></button>
+        <button id="btn-hatch" class="icon-btn" title="Hatch with offset (H)"><svg viewBox="0 0 24 24"><path d="M4 18L18 4M8 20L20 8M4 12L12 4"/><path d="M4 20h16V4H4z"/></svg><span class="sr-only">Hatch with offset</span></button>
     </div>
 
     <div class="btn-group">
@@ -1194,6 +1515,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <option value="deg">Degrees (°)</option>
             <option value="grad">Grads (g)</option>
             <option value="rad">Radians (rad)</option>
+        </select>
+        <select id="printScale" title="DXF print scale for text height">
+            <option value="50">Scale 1:50</option>
+            <option value="100" selected>Scale 1:100</option>
+            <option value="200">Scale 1:200</option>
+            <option value="500">Scale 1:500</option>
+            <option value="1000">Scale 1:1000</option>
         </select>
         <input type="color" id="strokeColor" value="#ffffff" title="Entity Color">
         <select id="lineWidth" title="Line Width">
@@ -1211,6 +1539,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <div class="btn-group" style="border: none;">
+        <input type="text" id="drawing-file-name" value="<?= htmlspecialchars(basename($dataFile, '.json'), ENT_QUOTES, 'UTF-8') ?>" title="Drawing file name" aria-label="Drawing file name">
+        <button id="btn-save" title="Save drawing">Save</button>
+        <button id="btn-rename" title="Rename drawing">Rename</button>
+        <select id="drawing-file-select" title="Select drawing to load" aria-label="Select drawing to load"><option>Loading...</option></select>
+        <button id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
+        <button id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
         <button id="btn-export-dxf" class="icon-btn" title="Export to DXF (2007)" style="background: #e65100; border-color: #f57c00; font-weight: 600;"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M5 7V4h14v3"/></svg><span class="sr-only">Export to DXF (2007)</span></button>
         <span id="save-indicator" style="font-size: 11px; color: #4ec9b0; margin-left: 6px;">● Auto-saved</span>
     </div>
@@ -1221,11 +1555,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <canvas id="cadCanvas"></canvas>
     </div>
 
+    <button id="toggle-properties-float" title="Show properties">+</button>
     <div id="properties-resizer" title="Resize properties panel"></div>
     <div id="properties-palette">
         <div class="panel-header">
             <span>PROPERTIES</span>
-            <span id="prop-entity-count" style="color: var(--text-muted);">No selection</span>
+            <span><span id="prop-entity-count" style="color: var(--text-muted);">No selection</span> <button id="toggle-properties" title="Collapse properties">−</button></span>
         </div>
         <div class="panel-content" id="properties-container">
             <div style="color: var(--text-muted); text-align: center; margin-top: 40px;">
@@ -1244,6 +1579,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <span id="status-ortho" class="osnap-badge">ORTHO: OFF</span>
         <span id="status-zoom" class="osnap-badge">ZOOM: 100%</span>
     </div>
+    <div id="active-users" class="osnap-badge" title="Active users">0000</div>
 </div>
 
 <div id="toast-container"></div>
@@ -1270,12 +1606,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const propContainer = document.getElementById('properties-container');
     const propCount = document.getElementById('prop-entity-count');
     const angleUnitsSelect = document.getElementById('angleUnits');
+    const printScaleSelect = document.getElementById('printScale');
     const lineWidthSelect = document.getElementById('lineWidth');
     const toastContainer = document.getElementById('toast-container');
     const saveIndicator = document.getElementById('save-indicator');
+    const drawingFileName = document.getElementById('drawing-file-name');
+    const saveButton = document.getElementById('btn-save');
+    const renameButton = document.getElementById('btn-rename');
+    const undoButton = document.getElementById('btn-undo');
+    const redoButton = document.getElementById('btn-redo');
+    const drawingFileSelect = document.getElementById('drawing-file-select');
+    const activeUsers = document.getElementById('active-users');
     const apiEndpoint = window.location.pathname;
     const propertiesResizer = document.getElementById('properties-resizer');
     const propertiesPalette = document.getElementById('properties-palette');
+    const toggleProperties = document.getElementById('toggle-properties');
+    const togglePropertiesFloat = document.getElementById('toggle-properties-float');
+
+    function setPropertiesCollapsed(collapsed) {
+        propertiesPalette.classList.toggle('collapsed', collapsed);
+        togglePropertiesFloat.style.display = collapsed ? 'block' : 'none';
+        toggleProperties.innerText = collapsed ? '+' : '−';
+        toggleProperties.title = collapsed ? 'Show properties' : 'Collapse properties';
+        togglePropertiesFloat.innerText = collapsed ? '+' : '−';
+        localStorage.setItem('cad_properties_collapsed', collapsed ? '1' : '0');
+        resize();
+    }
+
+    toggleProperties.addEventListener('click', () => setPropertiesCollapsed(true));
+    togglePropertiesFloat.addEventListener('click', () => setPropertiesCollapsed(false));
 
     propertiesResizer.addEventListener('pointerdown', (event) => {
         event.preventDefault();
@@ -1328,8 +1687,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return isNaN(num) ? fallback : num;
     }
 
+    function isValidUsername(value) {
+        return /^[\p{L}\p{N} _-]{1,24}$/u.test(value);
+    }
+
     function formatCoord(val) {
         return parseStrictFloat(val).toFixed(3);
+    }
+
+    function getDimensionDecimals(ent) {
+        const decimals = Number(ent && ent.decimals);
+        return Number.isInteger(decimals) ? Math.max(0, Math.min(6, decimals)) : 3;
+    }
+
+    function formatDimensionValue(ent, value) {
+        return parseStrictFloat(value).toFixed(getDimensionDecimals(ent));
     }
 
     function calculateAzimuthRad(dx, dy) {
@@ -1445,10 +1817,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return details;
     }
 
-    // State & History
+    // Editor state, active commands, selection, clipboard, and undo/redo history.
     let entities = [];
     let selectedEntity = null;
     let selectedEntities = new Set();
+    let selectedHatch = null;
     let selectedSegmentIndex = null;
     let selectedVertexIndex = 0;
     let currentTool = 'select';
@@ -1467,9 +1840,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let selectionBoxStart = null;
     let selectionBoxCurrent = null;
     let isSelectingBox = false;
+    let selectionBoxMoved = false;
+    let lastSelectionBox = null;
+    let imageCaptureSelection = null;
+    let isImageCaptureMode = false;
+    let imageCapturePreviousStatus = '';
     let clipboardEntities = [];
     let activeMove = null;
     let moveCommand = null;
+    let offsetCommand = null;
+    let dimensionCommand = null;
+    let hatchCommand = null;
     let lastMiddleClickTime = 0;
     let pastePreview = null;
 
@@ -1478,41 +1859,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const MAX_HISTORY = 50;
 
     let autoSaveTimer = null;
+    let lastKnownRevision = null;
+    let lastKnownEntityRevision = null;
+    let localChangesPending = false;
+    let syncTimer = null;
+    const tabId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+    const defaultUsername = tabId.slice(0, 4).toUpperCase();
+    let username = localStorage.getItem('cad_username') || defaultUsername;
+    if (!isValidUsername(username)) username = defaultUsername;
+
+    function updatePresence(showErrors = false) {
+        const formData = new FormData();
+        formData.append('action', 'presence');
+        formData.append('file', drawingFileName.value.trim());
+        formData.append('clientId', tabId);
+        formData.append('nickname', username);
+        return fetch(apiEndpoint, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status !== 'success') {
+                    if (showErrors) showToast(res.message || 'Could not update username.', 'error');
+                    return false;
+                }
+                activeUsers.textContent = res.users.join('  ');
+                activeUsers.title = res.users.length ? `Active users: ${res.users.join(', ')}` : 'No active users';
+                return true;
+            })
+            .catch(() => {
+                if (showErrors) showToast('Could not update username.', 'error');
+                return false;
+            });
+    }
+
+    function getDrawingPayload() {
+        return {
+            entities: entities
+        };
+    }
+
+    // Persist the shared drawing and debounce background saves after edits.
+    function saveDrawing(manual = false) {
+        const formData = new FormData();
+        formData.append('action', 'save');
+        formData.append('file', drawingFileName.value.trim());
+        formData.append('data', JSON.stringify(getDrawingPayload()));
+        return fetch(apiEndpoint, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status !== 'success') throw new Error(res.message || 'Save failed.');
+                drawingFileName.value = res.fileName;
+                lastKnownRevision = res.revision;
+                lastKnownEntityRevision = res.entityRevision;
+                localChangesPending = false;
+                refreshDrawingList(res.fileName);
+                updatePresence();
+                if (saveIndicator) saveIndicator.innerText = manual ? '● Saved' : '● Auto-saved';
+                return res;
+            });
+    }
+
     function triggerAutoSave() {
+        localChangesPending = true;
         if (saveIndicator) saveIndicator.innerText = '● Saving...';
         clearTimeout(autoSaveTimer);
-        autoSaveTimer = setTimeout(() => {
-            const payload = {
-                angleUnit: angleUnitsSelect.value,
-                zoom: camera.zoom,
-                lineWidth: lineWidthSelect.value,
-                propertiesWidth: propertiesPalette.getBoundingClientRect().width,
-                viewCenterVersion: 2,
-                viewCenterX: -camera.x / camera.zoom,
-                viewCenterY: camera.y / camera.zoom,
-                entities: entities
-            };
-            const formData = new FormData();
-            formData.append('action', 'save');
-            formData.append('data', JSON.stringify(payload));
-
-            fetch(apiEndpoint, { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(res => {
-                    if (res.status === 'success' && saveIndicator) {
-                        saveIndicator.innerText = '● Auto-saved';
-                    }
-                })
-                .catch(() => {
-                    if (saveIndicator) saveIndicator.innerText = '● Auto-save offline';
-                });
-        }, 400);
+        autoSaveTimer = setTimeout(() => saveDrawing().catch(() => {
+            if (saveIndicator) saveIndicator.innerText = '● Auto-save offline';
+        }), 400);
     }
 
     function saveState() {
+        localChangesPending = true;
         undoStack.push(JSON.stringify(entities));
         if (undoStack.length > MAX_HISTORY) undoStack.shift();
         redoStack = [];
+        updateHistoryButtons();
         triggerAutoSave();
     }
 
@@ -1562,7 +1982,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         showToast('Redo completed.', 'info', 1500);
     }
 
+    function updateHistoryButtons() {
+        undoButton.disabled = undoStack.length === 0;
+        redoButton.disabled = redoStack.length === 0;
+    }
+
+    undoButton.addEventListener('click', executeUndo);
+    redoButton.addEventListener('click', executeRedo);
+
     function switchToSelectMode(entityToSelect = null) {
+        selectedHatch = null;
         document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
         const selectBtn = document.getElementById('tool-select');
         if (selectBtn) selectBtn.classList.add('active');
@@ -1600,6 +2029,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const SNAP_TOLERANCE_PX = 14;
     const SELECT_TOLERANCE_PX = 8;
     const GRIP_HIT_RADIUS_PX = 8;
+    if (localStorage.getItem('cad_properties_collapsed') === '1') setPropertiesCollapsed(true);
 
     function getGridSize() {
         const rawSize = GRID_SIZE / camera.zoom;
@@ -1615,6 +2045,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             y: (canvas.height / 2 - sy + camera.y) / camera.zoom
         };
     }
+        // Geometry primitives used by snapping, hit-testing, offsets, and intersections.
 
     function worldToScreen(wx, wy) {
         return {
@@ -1779,6 +2210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return [];
     }
 
+    // OSNAP candidates are computed from the complete current drawing.
     function getSnapCandidates(refPoint, excludeEntity) {
         const snaps = [];
         const allSegments = [];
@@ -2060,6 +2492,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (ent.type === 'point') {
             return [{ id: 'center', type: 'move', x: ent.x, y: ent.y }];
         }
+        if (ent.type === 'dimension') {
+            const dx = ent.x2 - ent.x1;
+            const dy = ent.y2 - ent.y1;
+            const length = Math.hypot(dx, dy);
+            if (length < 1e-9) return [];
+            const textPosition = getDimensionTextPosition(ent);
+            return [
+                { id: 'start', type: 'dimension_start', label: 'P1', color: '#4caf50', x: ent.x1, y: ent.y1 },
+                { id: 'end', type: 'dimension_end', label: 'P2', color: '#ff9800', x: ent.x2, y: ent.y2 },
+                { id: 'position', type: 'dimension_position', color: '#00e5ff', x: textPosition.x, y: textPosition.y }
+            ];
+        }
         return [];
     }
 
@@ -2148,6 +2592,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else if (ent.type === 'point') {
             ent.x = targetPt.x; ent.y = targetPt.y;
+        } else if (ent.type === 'dimension') {
+            if (grip.id === 'start') {
+                ent.x1 = targetPt.x; ent.y1 = targetPt.y;
+            } else if (grip.id === 'end') {
+                ent.x2 = targetPt.x; ent.y2 = targetPt.y;
+            } else if (grip.id === 'position') {
+                ent.textX = targetPt.x;
+                ent.textY = targetPt.y;
+                const dimensionDx = ent.x2 - ent.x1;
+                const dimensionDy = ent.y2 - ent.y1;
+                const dimensionLength = Math.hypot(dimensionDx, dimensionDy);
+                if (dimensionLength > 1e-9) {
+                    ent.offset = (targetPt.x - ent.x1) * (-dimensionDy / dimensionLength) +
+                        (targetPt.y - ent.y1) * (dimensionDx / dimensionLength);
+                }
+            }
         }
 
         updatePropertiesPalette();
@@ -2156,6 +2616,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     function hitTestEntity(worldPt, screenPt) {
         for (let i = entities.length - 1; i >= 0; i--) {
             const ent = entities[i];
+            if (ent.hatch && isPointInsideHatch(worldPt, ent)) {
+                return { entity: ent, hatch: ent, segmentIndex: null };
+            }
             if (ent.type === 'line') {
                 const res = pointToSegmentDistance(worldPt.x, worldPt.y, ent.x1, ent.y1, ent.x2, ent.y2);
                 if (res.dist * camera.zoom <= SELECT_TOLERANCE_PX) return { entity: ent, segmentIndex: null };
@@ -2191,6 +2654,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else if (ent.type === 'point') {
                 const dist = Math.hypot(worldPt.x - ent.x, worldPt.y - ent.y);
                 if (dist * camera.zoom <= SELECT_TOLERANCE_PX + 4) return { entity: ent, segmentIndex: null };
+            } else if (ent.type === 'dimension') {
+                const dx = ent.x2 - ent.x1;
+                const dy = ent.y2 - ent.y1;
+                const length = Math.hypot(dx, dy);
+                if (length > 1e-9) {
+                    const nx = -dy / length;
+                    const ny = dx / length;
+                    const d1 = { x: ent.x1 + nx * ent.offset, y: ent.y1 + ny * ent.offset };
+                    const d2 = { x: ent.x2 + nx * ent.offset, y: ent.y2 + ny * ent.offset };
+                    const distance = pointToSegmentDistance(worldPt.x, worldPt.y, d1.x, d1.y, d2.x, d2.y);
+                    const textPosition = getDimensionTextPosition(ent);
+                    if (distance.dist * camera.zoom <= SELECT_TOLERANCE_PX ||
+                        Math.hypot(worldPt.x - textPosition.x, worldPt.y - textPosition.y) * camera.zoom <= 18) {
+                        return { entity: ent, segmentIndex: null };
+                    }
+                }
             }
         }
         return null;
@@ -2205,7 +2684,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 { x: ent.x, y: ent.y },
                 { x: ent.x + ent.w, y: ent.y + ent.h }
             );
-        } else if (ent.type === 'pline') {
+        } else if (ent.type === 'pline' || ent.type === 'polygon' || ent.type === 'hatch-strips') {
             points.push(...(ent.points || []));
         } else if (ent.type === 'circle' || ent.type === 'arc') {
             points.push(
@@ -2219,6 +2698,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         } else if (ent.type === 'point') {
             points.push({ x: ent.x, y: ent.y });
+        } else if (ent.type === 'dimension') {
+            const dx = ent.x2 - ent.x1;
+            const dy = ent.y2 - ent.y1;
+            const length = Math.hypot(dx, dy);
+            if (length > 1e-9) {
+                const nx = -dy / length;
+                const ny = dx / length;
+                points.push(
+                    { x: ent.x1, y: ent.y1 },
+                    { x: ent.x2, y: ent.y2 },
+                    { x: ent.x1 + nx * ent.offset, y: ent.y1 + ny * ent.offset },
+                    { x: ent.x2 + nx * ent.offset, y: ent.y2 + ny * ent.offset },
+                    getDimensionTextPosition(ent)
+                );
+            }
         }
         if (!points.length) return null;
         return {
@@ -2254,7 +2748,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         localStorage.setItem('cad_zoom', String(camera.zoom));
         statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
         render();
-        triggerAutoSave();
         showToast('Zoom extents applied.', 'info', 1500);
     }
 
@@ -2280,6 +2773,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ent.cx += offsetX; ent.cy += offsetY;
         } else if (ent.type === 'point') {
             ent.x += offsetX; ent.y += offsetY;
+        } else if (ent.type === 'dimension') {
+            ent.x1 += offsetX; ent.y1 += offsetY;
+            ent.x2 += offsetX; ent.y2 += offsetY;
         }
         return ent;
     }
@@ -2338,6 +2834,368 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return moveCommand.source.map(item => translateEntity(
             JSON.parse(JSON.stringify(item.state)), offsetX, offsetY
         ));
+    }
+
+    // Offset geometry preserves shared miter joins between consecutive polyline segments.
+    function getOffsetEntity(entity, distance, sidePoint) {
+        const offset = Math.abs(distance);
+        const result = JSON.parse(JSON.stringify(entity));
+        const style = { color: entity.color, width: entity.width };
+
+        if (entity.type === 'line') {
+            const dx = entity.x2 - entity.x1;
+            const dy = entity.y2 - entity.y1;
+            const length = Math.hypot(dx, dy);
+            if (length < 1e-9) return null;
+            const normal = { x: -dy / length, y: dx / length };
+            const midpoint = { x: (entity.x1 + entity.x2) / 2, y: (entity.y1 + entity.y2) / 2 };
+            const sign = ((sidePoint.x - midpoint.x) * normal.x + (sidePoint.y - midpoint.y) * normal.y) < 0 ? -1 : 1;
+            const shiftX = normal.x * offset * sign;
+            const shiftY = normal.y * offset * sign;
+            result.x1 += shiftX; result.y1 += shiftY;
+            result.x2 += shiftX; result.y2 += shiftY;
+        } else if (entity.type === 'rect') {
+            const center = { x: entity.x + entity.w / 2, y: entity.y + entity.h / 2 };
+            const outward = Math.hypot(sidePoint.x - center.x, sidePoint.y - center.y) >= Math.min(Math.abs(entity.w), Math.abs(entity.h)) / 2;
+            const sign = outward ? 1 : -1;
+            const x1 = Math.min(entity.x, entity.x + entity.w) - offset * sign;
+            const y1 = Math.min(entity.y, entity.y + entity.h) - offset * sign;
+            const x2 = Math.max(entity.x, entity.x + entity.w) + offset * sign;
+            const y2 = Math.max(entity.y, entity.y + entity.h) + offset * sign;
+            if (x2 <= x1 || y2 <= y1) return null;
+            result.x = x1; result.y = y1; result.w = x2 - x1; result.h = y2 - y1;
+        } else if (entity.type === 'pline') {
+            if (!entity.points || entity.points.length < 2) return null;
+            const sourcePoints = entity.points;
+            const segmentCount = entity.closed ? sourcePoints.length : sourcePoints.length - 1;
+            const segments = [];
+            let closestSide = null;
+            let closestDistance = Infinity;
+            for (let index = 0; index < segmentCount; index++) {
+                const start = sourcePoints[index];
+                const end = sourcePoints[(index + 1) % sourcePoints.length];
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const length = Math.hypot(dx, dy);
+                if (length < 1e-9) continue;
+                const normal = { x: -dy / length, y: dx / length };
+                const nearest = pointToSegmentDistance(sidePoint.x, sidePoint.y, start.x, start.y, end.x, end.y);
+                if (nearest.dist < closestDistance) {
+                    closestDistance = nearest.dist;
+                    closestSide = (sidePoint.x - nearest.x) * normal.x + (sidePoint.y - nearest.y) * normal.y;
+                }
+                segments.push({ start, end, normal });
+            }
+            if (!segments.length || closestSide === null || Math.abs(closestSide) < 1e-9) return null;
+            const sign = closestSide < 0 ? -1 : 1;
+            const offsetLines = segments.map(segment => ({
+                start: {
+                    x: segment.start.x + segment.normal.x * offset * sign,
+                    y: segment.start.y + segment.normal.y * offset * sign
+                },
+                end: {
+                    x: segment.end.x + segment.normal.x * offset * sign,
+                    y: segment.end.y + segment.normal.y * offset * sign
+                }
+            }));
+            const maxMiterLength = Math.max(offset * 4, offset + 1);
+            const intersectLines = (first, second) => {
+                const firstDx = first.end.x - first.start.x;
+                const firstDy = first.end.y - first.start.y;
+                const secondDx = second.end.x - second.start.x;
+                const secondDy = second.end.y - second.start.y;
+                const denominator = firstDx * secondDy - firstDy * secondDx;
+                if (Math.abs(denominator) < 1e-9) return null;
+                const t = ((second.start.x - first.start.x) * secondDy - (second.start.y - first.start.y) * secondDx) / denominator;
+                const intersection = { x: first.start.x + t * firstDx, y: first.start.y + t * firstDy };
+                const distanceFromFirst = Math.hypot(intersection.x - first.end.x, intersection.y - first.end.y);
+                const distanceFromSecond = Math.hypot(intersection.x - second.start.x, intersection.y - second.start.y);
+                return Math.max(distanceFromFirst, distanceFromSecond) <= maxMiterLength ? intersection : null;
+            };
+            result.points = sourcePoints.map((point, index) => {
+                if (!entity.closed && index === 0) return { ...offsetLines[0].start };
+                if (!entity.closed && index === sourcePoints.length - 1) return { ...offsetLines[segmentCount - 1].end };
+                const previousIndex = (index - 1 + segmentCount) % segmentCount;
+                const intersection = intersectLines(offsetLines[previousIndex], offsetLines[index % segmentCount]);
+                if (intersection) return intersection;
+                const firstNormal = segments[previousIndex].normal;
+                const secondNormal = segments[index % segmentCount].normal;
+                return {
+                    x: point.x + (firstNormal.x + secondNormal.x) * offset * sign / 2,
+                    y: point.y + (firstNormal.y + secondNormal.y) * offset * sign / 2
+                };
+            });
+        } else if (entity.type === 'circle' || entity.type === 'arc') {
+            const outward = Math.hypot(sidePoint.x - entity.cx, sidePoint.y - entity.cy) >= entity.r;
+            result.r = entity.r + (outward ? offset : -offset);
+            if (result.r <= 0) return null;
+        } else if (entity.type === 'ellipse') {
+            const outward = Math.hypot(sidePoint.x - entity.cx, sidePoint.y - entity.cy) >= Math.min(entity.rx, entity.ry);
+            const sign = outward ? 1 : -1;
+            result.rx += sign * offset;
+            result.ry += sign * offset;
+            if (result.rx <= 0 || result.ry <= 0) return null;
+        } else {
+            return null;
+        }
+        return Object.assign(result, style);
+    }
+
+    function startOffsetCommand() {
+        if (!selectedEntity || selectedEntities.size !== 1) {
+            showToast('Select one object to offset.', 'warning', 1800);
+            return;
+        }
+        const rawDistance = window.prompt('Offset distance:', '10');
+        if (rawDistance === null) return;
+        const distance = parseStrictFloat(rawDistance, NaN);
+        if (!Number.isFinite(distance) || distance <= 0) {
+            showToast('Offset distance must be greater than zero.', 'error', 1800);
+            return;
+        }
+        offsetCommand = { source: selectedEntity, distance };
+        statusMode.innerText = 'OFFSET: SIDE';
+        showToast('Click the side for the offset.', 'info', 2200);
+        render();
+    }
+
+    function createDistanceDimension(firstPoint, secondPoint, dimensionPoint) {
+        const dx = secondPoint.x - firstPoint.x;
+        const dy = secondPoint.y - firstPoint.y;
+        const length = Math.hypot(dx, dy);
+        if (length < 1e-9) return null;
+        const normal = { x: -dy / length, y: dx / length };
+        const offset = (dimensionPoint.x - firstPoint.x) * normal.x + (dimensionPoint.y - firstPoint.y) * normal.y;
+        return {
+            type: 'dimension',
+            x1: firstPoint.x,
+            y1: firstPoint.y,
+            x2: secondPoint.x,
+            y2: secondPoint.y,
+            offset,
+            textX: dimensionPoint.x,
+            textY: dimensionPoint.y,
+            decimals: 3,
+            color: document.getElementById('strokeColor').value,
+            width: Math.max(1, parseInt(document.getElementById('lineWidth').value))
+        };
+    }
+
+    function getDimensionTextPosition(ent) {
+        if (Number.isFinite(ent.textX) && Number.isFinite(ent.textY)) {
+            return { x: ent.textX, y: ent.textY };
+        }
+        const dx = ent.x2 - ent.x1;
+        const dy = ent.y2 - ent.y1;
+        const length = Math.hypot(dx, dy);
+        if (length < 1e-9) return { x: ent.x1, y: ent.y1 };
+        return {
+            x: (ent.x1 + ent.x2) / 2 - dy / length * ent.offset,
+            y: (ent.y1 + ent.y2) / 2 + dx / length * ent.offset
+        };
+    }
+
+    function getDimensionPreview() {
+        if (!dimensionCommand || !dimensionCommand.firstPoint || !dimensionCommand.secondPoint) return null;
+        const dimensionPoint = dimensionCommand.dimensionPoint || currentMouse;
+        return createDistanceDimension(dimensionCommand.firstPoint, dimensionCommand.secondPoint, dimensionPoint);
+    }
+
+    function startDimensionCommand() {
+        dimensionCommand = { firstPoint: null, secondPoint: null, dimensionPoint: null };
+        statusMode.innerText = 'DIMENSION: FIRST POINT';
+        showToast('Select the first point.', 'info', 2200);
+        render();
+    }
+
+    function startHatchCommand() {
+        if (!selectedEntity || selectedEntities.size !== 1) {
+            showToast('Select one object to hatch.', 'warning', 1800);
+            return;
+        }
+        const supported = selectedEntity.type === 'line' || selectedEntity.type === 'rect' ||
+            selectedEntity.type === 'circle' || selectedEntity.type === 'ellipse' || selectedEntity.type === 'pline';
+        if (!supported) {
+            showToast('Hatch supports lines, polylines, rectangles, circles and ellipses.', 'warning', 2200);
+            return;
+        }
+        const rawDistance = window.prompt('Hatch offset distance:', '10');
+        if (rawDistance === null) return;
+        const distance = parseStrictFloat(rawDistance, NaN);
+        if (!Number.isFinite(distance) || distance <= 0) {
+            showToast('Hatch offset distance must be greater than zero.', 'error', 1800);
+            return;
+        }
+        hatchCommand = { entity: selectedEntity, distance };
+        statusMode.innerText = 'HATCH: SIDE';
+        showToast('Click the side for the hatch.', 'info', 2200);
+        render();
+    }
+
+    function getHatchSideSign(entity, sidePoint) {
+        if (entity.type === 'rect') {
+            const minX = Math.min(entity.x, entity.x + entity.w);
+            const maxX = Math.max(entity.x, entity.x + entity.w);
+            const minY = Math.min(entity.y, entity.y + entity.h);
+            const maxY = Math.max(entity.y, entity.y + entity.h);
+            return sidePoint.x >= minX && sidePoint.x <= maxX && sidePoint.y >= minY && sidePoint.y <= maxY ? -1 : 1;
+        }
+        if (entity.type === 'circle') {
+            return Math.hypot(sidePoint.x - entity.cx, sidePoint.y - entity.cy) < Math.abs(entity.r) ? -1 : 1;
+        }
+        if (entity.type === 'ellipse') {
+            const normalizedDistance = Math.hypot((sidePoint.x - entity.cx) / entity.rx, (sidePoint.y - entity.cy) / entity.ry);
+            return normalizedDistance < 1 ? -1 : 1;
+        }
+        if (entity.type === 'line') {
+            const dx = entity.x2 - entity.x1;
+            const dy = entity.y2 - entity.y1;
+            const length = Math.hypot(dx, dy);
+            if (length < 1e-9) return null;
+            const midpoint = { x: (entity.x1 + entity.x2) / 2, y: (entity.y1 + entity.y2) / 2 };
+            return ((sidePoint.x - midpoint.x) * -dy + (sidePoint.y - midpoint.y) * dx) < 0 ? -1 : 1;
+        }
+        if (entity.type === 'pline' && entity.points.length > 1) {
+            const segmentCount = entity.closed ? entity.points.length : entity.points.length - 1;
+            let nearestSide = null;
+            let nearestDistance = Infinity;
+            for (let index = 0; index < segmentCount; index++) {
+                const start = entity.points[index];
+                const end = entity.points[(index + 1) % entity.points.length];
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const length = Math.hypot(dx, dy);
+                if (length < 1e-9) continue;
+                const nearest = pointToSegmentDistance(sidePoint.x, sidePoint.y, start.x, start.y, end.x, end.y);
+                if (nearest.dist < nearestDistance) {
+                    nearestDistance = nearest.dist;
+                    nearestSide = (sidePoint.x - nearest.x) * -dy / length + (sidePoint.y - nearest.y) * dx / length;
+                }
+            }
+            return nearestSide === null || Math.abs(nearestSide) < 1e-9 ? null : (nearestSide < 0 ? -1 : 1);
+        }
+        return sidePoint.x >= entity.cx ? 1 : -1;
+    }
+
+    function getHatchReferencePoint(entity, sideSign) {
+        if (entity.type === 'line') {
+            const dx = entity.x2 - entity.x1;
+            const dy = entity.y2 - entity.y1;
+            const length = Math.hypot(dx, dy) || 1;
+            return { x: (entity.x1 + entity.x2) / 2 - dy / length * sideSign, y: (entity.y1 + entity.y2) / 2 + dx / length * sideSign };
+        }
+        if (entity.type === 'pline' && entity.points.length > 1) {
+            const start = entity.points[0];
+            const end = entity.points[1];
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const length = Math.hypot(dx, dy) || 1;
+            return { x: (start.x + end.x) / 2 - dy / length * sideSign, y: (start.y + end.y) / 2 + dx / length * sideSign };
+        }
+        if (entity.type === 'rect') {
+            return {
+                x: entity.x + entity.w / 2 + (sideSign > 0 ? sideSign * (Math.abs(entity.w) + 1) : 0),
+                y: entity.y + entity.h / 2
+            };
+        }
+        if (entity.type === 'circle') {
+            return { x: entity.cx + (sideSign > 0 ? sideSign * (Math.abs(entity.r) + 1) : 0), y: entity.cy };
+        }
+        if (entity.type === 'ellipse') {
+            return { x: entity.cx + (sideSign > 0 ? sideSign * (Math.min(Math.abs(entity.rx), Math.abs(entity.ry)) + 1) : 0), y: entity.cy };
+        }
+        return { x: entity.cx + sideSign, y: entity.cy };
+    }
+
+    // Hatch boundaries use the mitered offset polyline so adjacent segment strips never overlap.
+    function getHatchBoundary(entity) {
+        const hatch = entity.hatch;
+        if (!hatch) return null;
+        const sideSign = Number(hatch.sideSign) || 1;
+        const distance = Math.abs(Number(hatch.distance) || 0);
+        if ((entity.type === 'line' || entity.type === 'pline') && distance > 0) {
+            const sourcePoints = entity.type === 'line'
+                ? [{ x: entity.x1, y: entity.y1 }, { x: entity.x2, y: entity.y2 }]
+                : entity.points;
+            const segmentCount = entity.type === 'pline' && entity.closed
+                ? sourcePoints.length
+                : sourcePoints.length - 1;
+            const offsetBoundary = entity.type === 'line'
+                ? null
+                : getOffsetEntity(entity, distance, getHatchReferencePoint(entity, sideSign));
+            if (entity.type === 'pline' && (!offsetBoundary || !offsetBoundary.points || offsetBoundary.points.length !== sourcePoints.length)) {
+                return null;
+            }
+            const strips = [];
+            for (let index = 0; index < segmentCount; index++) {
+                const start = sourcePoints[index];
+                const end = sourcePoints[(index + 1) % sourcePoints.length];
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const length = Math.hypot(dx, dy);
+                if (length < 1e-9) continue;
+                const normal = { x: -dy / length, y: dx / length };
+                const offsetStart = entity.type === 'line'
+                    ? { x: start.x + normal.x * distance * sideSign, y: start.y + normal.y * distance * sideSign }
+                    : offsetBoundary.points[index];
+                const offsetEnd = entity.type === 'line'
+                    ? { x: end.x + normal.x * distance * sideSign, y: end.y + normal.y * distance * sideSign }
+                    : offsetBoundary.points[(index + 1) % sourcePoints.length];
+                strips.push([start, end, offsetEnd, offsetStart]);
+            }
+            return { type: 'hatch-strips', strips, points: strips.flat() };
+        }
+        const boundary = distance > 0 ? getOffsetEntity(entity, distance, getHatchReferencePoint(entity, sideSign)) : entity;
+        if (!boundary) return null;
+        const closedTypes = entity.type === 'rect' || entity.type === 'circle' || entity.type === 'ellipse' ||
+            (entity.type === 'pline' && entity.closed);
+        if (closedTypes && distance > 0) {
+            const sourceBounds = getEntityBounds(entity);
+            const offsetBounds = getEntityBounds(boundary);
+            const sourceArea = sourceBounds ? (sourceBounds.maxX - sourceBounds.minX) * (sourceBounds.maxY - sourceBounds.minY) : 0;
+            const offsetArea = offsetBounds ? (offsetBounds.maxX - offsetBounds.minX) * (offsetBounds.maxY - offsetBounds.minY) : 0;
+            const outer = offsetArea >= sourceArea ? boundary : entity;
+            const inner = outer === boundary ? entity : boundary;
+            return { type: 'hatch-band', outer, inner };
+        }
+        return boundary;
+    }
+
+    function isPointInsideBoundary(point, boundary) {
+        if (boundary.type === 'circle') {
+            return Math.hypot(point.x - boundary.cx, point.y - boundary.cy) <= Math.abs(boundary.r);
+        }
+        if (boundary.type === 'ellipse') {
+            return ((point.x - boundary.cx) / boundary.rx) ** 2 + ((point.y - boundary.cy) / boundary.ry) ** 2 <= 1;
+        }
+        if (boundary.type === 'rect') {
+            const minX = Math.min(boundary.x, boundary.x + boundary.w);
+            const maxX = Math.max(boundary.x, boundary.x + boundary.w);
+            const minY = Math.min(boundary.y, boundary.y + boundary.h);
+            const maxY = Math.max(boundary.y, boundary.y + boundary.h);
+            return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+        }
+        const points = boundary.points || [];
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const intersects = ((points[i].y > point.y) !== (points[j].y > point.y)) &&
+                point.x < (points[j].x - points[i].x) * (point.y - points[i].y) / (points[j].y - points[i].y) + points[i].x;
+            if (intersects) inside = !inside;
+        }
+        return inside;
+    }
+
+    function isPointInsideHatch(point, entity) {
+        if (!entity.hatch) return false;
+        const hatchBoundary = getHatchBoundary(entity);
+        if (!hatchBoundary) return false;
+        if (hatchBoundary.type === 'hatch-strips') {
+            return hatchBoundary.strips.some(strip => isPointInsideBoundary(point, { type: 'polygon', points: strip }));
+        }
+        if (hatchBoundary.type === 'hatch-band') {
+            return isPointInsideBoundary(point, hatchBoundary.outer) && !isPointInsideBoundary(point, hatchBoundary.inner);
+        }
+        return isPointInsideBoundary(point, hatchBoundary);
     }
 
     function getCommandPoint(screenX, screenY) {
@@ -2442,8 +3300,111 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
     }
 
+    // Hatch rendering clips each polyline segment independently at its local pattern angle.
+    function drawHatch(ent) {
+        const hatchBoundary = getHatchBoundary(ent);
+        if (!hatchBoundary) return;
+        const bounds = getEntityBounds(hatchBoundary.type === 'hatch-band' ? hatchBoundary.outer : hatchBoundary);
+        if (!bounds) return;
+        const hatch = ent.hatch === true ? {} : ent.hatch;
+        const requestedSpacing = Number(hatch.spacing);
+        const spacing = Number.isFinite(requestedSpacing) && requestedSpacing > 0 ? requestedSpacing : 10;
+        const angle = (Number(hatch.angle) || 45) * Math.PI / 180;
+        const centerX = (bounds.minX + bounds.maxX) / 2;
+        const centerY = (bounds.minY + bounds.maxY) / 2;
+        const extent = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) + 4;
+        const center = worldToScreen(centerX, centerY);
+
+        ctx.save();
+        if (hatchBoundary.type === 'hatch-strips') {
+            hatchBoundary.strips.forEach(strip => {
+                const screenStrip = strip.map(point => worldToScreen(point.x, point.y));
+                const center = screenStrip.reduce((result, point) => ({
+                    x: result.x + point.x / screenStrip.length,
+                    y: result.y + point.y / screenStrip.length
+                }), { x: 0, y: 0 });
+                const extent = Math.max(...screenStrip.map(point => Math.hypot(point.x - center.x, point.y - center.y))) + 4;
+                const segmentAngle = Math.atan2(
+                    screenStrip[1].y - screenStrip[0].y,
+                    screenStrip[1].x - screenStrip[0].x
+                );
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(screenStrip[0].x, screenStrip[0].y);
+                screenStrip.slice(1).forEach(screenPoint => ctx.lineTo(screenPoint.x, screenPoint.y));
+                ctx.closePath();
+                ctx.clip();
+                ctx.translate(center.x, center.y);
+                ctx.rotate(segmentAngle + angle);
+                ctx.strokeStyle = selectedHatch === ent ? '#ffd166' : (hatch.color || ent.color || '#ffffff');
+                ctx.globalAlpha = 0.35;
+                ctx.lineWidth = Math.max(0.5, (hatch.width || ent.width || 1) * 0.6);
+                for (let y = -extent; y <= extent; y += spacing * camera.zoom) {
+                    ctx.beginPath();
+                    ctx.moveTo(-extent, y);
+                    ctx.lineTo(extent, y);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            });
+            ctx.restore();
+            return;
+        }
+        const appendPath = boundary => {
+            if (boundary.type === 'rect') {
+                const first = worldToScreen(boundary.x, boundary.y);
+                const second = worldToScreen(boundary.x + boundary.w, boundary.y + boundary.h);
+                ctx.rect(Math.min(first.x, second.x), Math.min(first.y, second.y), Math.abs(second.x - first.x), Math.abs(second.y - first.y));
+            } else if (boundary.type === 'pline' || boundary.type === 'polygon') {
+                const points = boundary.type === 'pline' ? boundary.points : boundary.points;
+                const first = worldToScreen(points[0].x, points[0].y);
+                ctx.moveTo(first.x, first.y);
+                points.slice(1).forEach(point => {
+                    const screenPoint = worldToScreen(point.x, point.y);
+                    ctx.lineTo(screenPoint.x, screenPoint.y);
+                });
+                ctx.closePath();
+            } else if (boundary.type === 'circle') {
+                const boundaryCenter = worldToScreen(boundary.cx, boundary.cy);
+                ctx.moveTo(boundaryCenter.x + boundary.r * camera.zoom, boundaryCenter.y);
+                ctx.arc(boundaryCenter.x, boundaryCenter.y, boundary.r * camera.zoom, 0, Math.PI * 2);
+            } else if (boundary.type === 'ellipse') {
+                const boundaryCenter = worldToScreen(boundary.cx, boundary.cy);
+                ctx.moveTo(boundaryCenter.x + Math.abs(boundary.rx) * camera.zoom, boundaryCenter.y);
+                ctx.ellipse(boundaryCenter.x, boundaryCenter.y, Math.abs(boundary.rx) * camera.zoom, Math.abs(boundary.ry) * camera.zoom, 0, 0, Math.PI * 2);
+            } else {
+                return false;
+            }
+            return true;
+        };
+        ctx.beginPath();
+        if (hatchBoundary.type === 'hatch-band') {
+            if (!appendPath(hatchBoundary.outer) || !appendPath(hatchBoundary.inner)) {
+                ctx.restore();
+                return;
+            }
+        } else if (!appendPath(hatchBoundary)) {
+            ctx.restore();
+            return;
+        }
+        ctx.clip('evenodd');
+        ctx.translate(center.x, center.y);
+        ctx.rotate(angle);
+        ctx.strokeStyle = selectedHatch === ent ? '#ffd166' : (hatch.color || ent.color || '#ffffff');
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = Math.max(0.5, (hatch.width || ent.width || 1) * 0.6);
+        for (let y = -extent * camera.zoom; y <= extent * camera.zoom; y += spacing * camera.zoom) {
+            ctx.beginPath();
+            ctx.moveTo(-extent * camera.zoom, y);
+            ctx.lineTo(extent * camera.zoom, y);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     function drawEntity(ent, isTemp = false) {
-        const isSelected = selectedEntities.has(ent) || selectedEntity === ent;
+        const isSelected = !selectedHatch && (selectedEntities.has(ent) || selectedEntity === ent);
 
         ctx.save();
         ctx.beginPath();
@@ -2451,6 +3412,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ctx.fillStyle = isSelected ? '#00bfff' : (ent.color || '#fff');
         ctx.lineWidth = (ent.width || 2);
         ctx.setLineDash(isTemp ? [4, 4] : (isSelected ? [6, 3] : []));
+        if (!isTemp && ent.hatch) {
+            drawHatch(ent);
+            ctx.beginPath();
+        }
 
         if (ent.type === 'line') {
             const p1 = worldToScreen(ent.x1, ent.y1);
@@ -2560,6 +3525,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ctx.fillStyle = isSelected ? '#00bfff' : (ent.color || '#fff');
             ctx.fillText(`${ent.name || ''}:${formatCoord(ent.z || 0)}`, p.x + 8, p.y - 8);
             ctx.restore();
+        }
+        else if (ent.type === 'dimension') {
+            const dx = ent.x2 - ent.x1;
+            const dy = ent.y2 - ent.y1;
+            const length = Math.hypot(dx, dy);
+            if (length > 1e-9) {
+                const textWorldPosition = getDimensionTextPosition(ent);
+                const textPosition = worldToScreen(textWorldPosition.x, textWorldPosition.y);
+                const label = formatDimensionValue(ent, length);
+                ctx.font = '11px Consolas, monospace';
+                const labelWidth = ctx.measureText(label).width;
+                let labelAngle = Math.atan2(-dy, dx);
+                if (labelAngle > Math.PI / 2 || labelAngle < -Math.PI / 2) labelAngle += Math.PI;
+                ctx.save();
+                ctx.translate(textPosition.x, textPosition.y);
+                ctx.rotate(labelAngle);
+                ctx.fillStyle = 'rgba(18, 18, 18, 0.9)';
+                ctx.fillRect(-labelWidth / 2 - 4, -15, labelWidth + 8, 15);
+                ctx.fillStyle = ent.color || '#ffd166';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(label, 0, -3);
+                ctx.restore();
+            }
         }
 
         ctx.restore();
@@ -2680,6 +3669,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Contours are generated from point elevations using Delaunay triangles and level intersections.
     function getDelaunayTriangles(pointList) {
         const bounds = pointList.reduce((result, point) => ({
             minX: Math.min(result.minX, point.x),
@@ -2870,6 +3860,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ctx.restore();
         }
 
+        const dimensionPreview = getDimensionPreview();
+        if (dimensionPreview) drawEntity(dimensionPreview, true);
+
         drawIntersectionMarkers();
 
         if (isDrawing) {
@@ -2928,19 +3921,129 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ctx.strokeRect(start.x, start.y, current.x - start.x, current.y - start.y);
             ctx.restore();
         }
+
+        if (imageCaptureSelection) {
+            const { start, current } = imageCaptureSelection;
+            ctx.save();
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(start.x, start.y, current.x - start.x, current.y - start.y);
+            ctx.restore();
+        }
     }
 
+    function bindUsernameInput() {
+        const usernameInput = document.getElementById('prop-username');
+        if (!usernameInput) return;
+        usernameInput.value = username;
+        usernameInput.addEventListener('change', (event) => {
+            const value = event.target.value.trim();
+            if (!isValidUsername(value)) {
+                usernameInput.value = username;
+                showToast('Username must be 1-24 letters, numbers, spaces, underscores or hyphens.', 'error');
+                return;
+            }
+            const previousUsername = username;
+            username = value;
+            localStorage.setItem('cad_username', username);
+            updatePresence(true).then(updated => {
+                if (!updated) {
+                    username = previousUsername;
+                    localStorage.setItem('cad_username', username);
+                    updatePropertiesPalette();
+                    return;
+                }
+                showToast('Username updated.', 'success', 1500);
+            });
+        });
+    }
+
+    function renderHatchProperties(entity) {
+        const hatch = entity.hatch === true ? { pattern: 'diagonal', spacing: 10, angle: 45, distance: 10, sideSign: 1 } : entity.hatch;
+        const sideOptions = entity.type === 'line' || (entity.type === 'pline' && !entity.closed)
+            ? `<option value="-1" ${Number(hatch.sideSign) < 0 ? 'selected' : ''}>Left</option><option value="1" ${Number(hatch.sideSign) >= 0 ? 'selected' : ''}>Right</option>`
+            : `<option value="-1" ${Number(hatch.sideSign) < 0 ? 'selected' : ''}>Inside</option><option value="1" ${Number(hatch.sideSign) >= 0 ? 'selected' : ''}>Outside</option>`;
+        propCount.innerText = 'HATCH';
+        propContainer.innerHTML = `
+            <div class="prop-group">
+                <div class="prop-group-title">Hatch</div>
+                <div class="prop-row"><label>Pattern</label><input type="text" readonly value="Diagonal"></div>
+                <div class="prop-row"><label>Enabled</label><select id="prop-hatch-enabled"><option value="true" selected>Yes</option><option value="false">No</option></select></div>
+                <div class="prop-row"><label>Color</label><input type="color" id="prop-hatch-color" value="${hatch.color || entity.color || '#ffffff'}"></div>
+                <div class="prop-row"><label>Line Weight</label><select id="prop-hatch-width">${[1, 2, 3, 4, 5].map(value => `<option value="${value}" ${Number(hatch.width || entity.width || 1) === value ? 'selected' : ''}>${value} px</option>`).join('')}</select></div>
+                <div class="prop-row"><label>Offset Distance</label><input type="text" id="prop-hatch-distance" value="${formatCoord(hatch.distance)}"></div>
+                <div class="prop-row"><label>Line Spacing</label><input type="text" id="prop-hatch-spacing" value="${formatCoord(hatch.spacing)}"></div>
+                <div class="prop-row"><label>Pattern Angle</label><input type="text" id="prop-hatch-angle" value="${formatCoord(hatch.angle)}"></div>
+                <div class="prop-row"><label>Side</label><select id="prop-hatch-side">${sideOptions}</select></div>
+            </div>
+        `;
+        const updateHatch = (property, value) => {
+            saveState();
+            entity.hatch = hatch;
+            hatch[property] = value;
+            updatePropertiesPalette();
+            render();
+        };
+        document.getElementById('prop-hatch-enabled').addEventListener('change', event => {
+            if (event.target.value === 'false') {
+                saveState();
+                entity.hatch = null;
+                selectedHatch = null;
+                updatePropertiesPalette();
+                render();
+            }
+        });
+        document.getElementById('prop-hatch-color').addEventListener('change', event => updateHatch('color', event.target.value));
+        document.getElementById('prop-hatch-width').addEventListener('change', event => updateHatch('width', Number(event.target.value)));
+        document.getElementById('prop-hatch-distance').addEventListener('change', event => {
+            const value = parseStrictFloat(event.target.value, NaN);
+            if (Number.isFinite(value) && value > 0) updateHatch('distance', value);
+            else updatePropertiesPalette();
+        });
+        document.getElementById('prop-hatch-spacing').addEventListener('change', event => {
+            const value = parseStrictFloat(event.target.value, NaN);
+            if (Number.isFinite(value) && value > 0) updateHatch('spacing', value);
+            else updatePropertiesPalette();
+        });
+        document.getElementById('prop-hatch-angle').addEventListener('change', event => {
+            const value = parseStrictFloat(event.target.value, NaN);
+            if (Number.isFinite(value)) updateHatch('angle', value);
+            else updatePropertiesPalette();
+        });
+        document.getElementById('prop-hatch-side').addEventListener('change', event => updateHatch('sideSign', Number(event.target.value) < 0 ? -1 : 1));
+    }
+
+    // The properties panel is rebuilt from the current entity selection and its editable fields.
     function updatePropertiesPalette() {
+        let html = `
+            <div class="prop-group">
+                <div class="prop-group-title">User</div>
+                <div class="prop-row">
+                    <label for="prop-username">Username</label>
+                    <input type="text" id="prop-username" maxlength="24" value="">
+                </div>
+            </div>
+        `;
+
         if (!selectedEntity) {
             propCount.innerText = 'No selection';
-            propContainer.innerHTML = `<div style="color: var(--text-muted); text-align: center; margin-top: 40px;">Select an entity to view and edit its properties.</div>`;
+            propContainer.innerHTML = html + `<div style="color: var(--text-muted); text-align: center; margin-top: 40px;">Select an entity to view and edit its properties.</div>`;
+            bindUsernameInput();
             return;
         }
 
-        propCount.innerText = selectedEntities.size > 1
+        if (selectedHatch) {
+            renderHatchProperties(selectedHatch);
+            return;
+        }
+
+        propCount.innerText = selectedHatch
+            ? 'HATCH'
+            : selectedEntities.size > 1
             ? `${selectedEntities.size} SELECTED`
             : selectedEntity.type.toUpperCase();
-        let html = `
+        html += `
             <div class="prop-group">
                 <div class="prop-group-title">General</div>
                 <div class="prop-row">
@@ -2955,6 +4058,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
         `;
+        if (selectedEntity.hatch) {
+            const hatch = selectedEntity.hatch === true ? { distance: 10, spacing: 10, angle: 45, sideSign: 1 } : selectedEntity.hatch;
+            const sideOptions = selectedEntity.type === 'line' || (selectedEntity.type === 'pline' && !selectedEntity.closed)
+                ? `<option value="-1" ${Number(hatch.sideSign) < 0 ? 'selected' : ''}>Left</option><option value="1" ${Number(hatch.sideSign) >= 0 ? 'selected' : ''}>Right</option>`
+                : `<option value="-1" ${Number(hatch.sideSign) < 0 ? 'selected' : ''}>Inside</option><option value="1" ${Number(hatch.sideSign) >= 0 ? 'selected' : ''}>Outside</option>`;
+            html += `
+                <div class="prop-group">
+                    <div class="prop-group-title">Hatch</div>
+                    <div class="prop-row"><label>Pattern</label><input type="text" readonly value="Diagonal"></div>
+                    <div class="prop-row"><label>Enabled</label><select id="prop-hatch-enabled"><option value="true" selected>Yes</option><option value="false">No</option></select></div>
+                    <div class="prop-row"><label>Offset Distance</label><input type="text" id="prop-hatch-distance" value="${formatCoord(hatch.distance)}"></div>
+                    <div class="prop-row"><label>Line Spacing</label><input type="text" id="prop-hatch-spacing" value="${formatCoord(hatch.spacing)}"></div>
+                    <div class="prop-row"><label>Pattern Angle</label><input type="text" id="prop-hatch-angle" value="${formatCoord(hatch.angle)}"></div>
+                    <div class="prop-row"><label>Side</label><select id="prop-hatch-side">${sideOptions}</select></div>
+                </div>
+            `;
+        }
 
         if (selectedEntity.type === 'line') {
             const dx = selectedEntity.x2 - selectedEntity.x1;
@@ -3203,6 +4323,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="prop-row"><label>Chord Length (C)</label><input type="text" readonly value="${formatCoord(chordLength)}"></div>
                 </div>
             `;
+        } else if (selectedEntity.type === 'dimension') {
+            const dimensionLength = Math.hypot(selectedEntity.x2 - selectedEntity.x1, selectedEntity.y2 - selectedEntity.y1);
+            const dimensionAngle = azimuthRadToValue(calculateAzimuthRad(selectedEntity.x2 - selectedEntity.x1, selectedEntity.y2 - selectedEntity.y1));
+            const dimensionTextPosition = getDimensionTextPosition(selectedEntity);
+            const dimensionDecimals = getDimensionDecimals(selectedEntity);
+            html += `
+                <div class="prop-group">
+                    <div class="prop-group-title">Distance Dimension</div>
+                    <div class="prop-row"><label>Type</label><input type="text" readonly value="Distance"></div>
+                    <div class="prop-row"><label>Start X (P1)</label><input type="text" id="prop-dimension-x1" value="${formatCoord(selectedEntity.x1)}"></div>
+                    <div class="prop-row"><label>Start Y (P1)</label><input type="text" id="prop-dimension-y1" value="${formatCoord(selectedEntity.y1)}"></div>
+                    <div class="prop-row"><label>End X (P2)</label><input type="text" id="prop-dimension-x2" value="${formatCoord(selectedEntity.x2)}"></div>
+                    <div class="prop-row"><label>End Y (P2)</label><input type="text" id="prop-dimension-y2" value="${formatCoord(selectedEntity.y2)}"></div>
+                    <div class="prop-row"><label>Distance</label><input type="text" id="prop-dimension-distance" value="${formatDimensionValue(selectedEntity, dimensionLength)}"></div>
+                    <div class="prop-row"><label>Angle</label><input type="text" readonly value="${dimensionAngle.toFixed(4)} ${getAngleUnitLabel()}"></div>
+                    <div class="prop-row"><label>Position Offset</label><input type="text" id="prop-dimension-offset" value="${formatCoord(selectedEntity.offset)}"></div>
+                    <div class="prop-row"><label>Text X</label><input type="text" id="prop-dimension-text-x" value="${formatCoord(dimensionTextPosition.x)}"></div>
+                    <div class="prop-row"><label>Text Y</label><input type="text" id="prop-dimension-text-y" value="${formatCoord(dimensionTextPosition.y)}"></div>
+                    <div class="prop-row"><label>Decimals</label><select id="prop-dimension-decimals">
+                        ${[0, 1, 2, 3, 4, 5, 6].map(value => `<option value="${value}" ${value === dimensionDecimals ? 'selected' : ''}>${value}</option>`).join('')}
+                    </select></div>
+                </div>
+            `;
         } else if (selectedEntity.type === 'point') {
             html += `
                 <div class="prop-group">
@@ -3228,6 +4371,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         };
 
         const colorInput = document.getElementById('prop-color');
+        bindUsernameInput();
+
         if (colorInput) colorInput.addEventListener('change', (e) => {
             saveState();
             selectedEntity.color = e.target.value; 
@@ -3244,7 +4389,119 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             showToast('Entity line width updated.', 'success', 1500);
         });
 
-        if (selectedEntity.type === 'line') {
+        if (selectedEntity.hatch) {
+            const hatch = selectedEntity.hatch === true ? { pattern: 'diagonal', spacing: 10, angle: 45, distance: 10, sideSign: 1 } : selectedEntity.hatch;
+            const updateHatch = (property, value) => {
+                saveState();
+                selectedEntity.hatch = hatch;
+                hatch[property] = value;
+                updatePropertiesPalette();
+                render();
+            };
+            const hatchEnabled = document.getElementById('prop-hatch-enabled');
+            if (hatchEnabled) hatchEnabled.addEventListener('change', (e) => {
+                saveState();
+                selectedEntity.hatch = e.target.value === 'true' ? hatch : null;
+                updatePropertiesPalette();
+                render();
+            });
+            const hatchDistance = document.getElementById('prop-hatch-distance');
+            if (hatchDistance) hatchDistance.addEventListener('change', (e) => {
+                const value = parseStrictFloat(e.target.value, NaN);
+                if (!Number.isFinite(value) || value <= 0) {
+                    updatePropertiesPalette();
+                    showToast('Hatch offset must be greater than zero.', 'error', 1800);
+                    return;
+                }
+                updateHatch('distance', value);
+            });
+            const hatchSpacing = document.getElementById('prop-hatch-spacing');
+            if (hatchSpacing) hatchSpacing.addEventListener('change', (e) => {
+                const value = parseStrictFloat(e.target.value, NaN);
+                if (!Number.isFinite(value) || value <= 0) {
+                    updatePropertiesPalette();
+                    showToast('Hatch spacing must be greater than zero.', 'error', 1800);
+                    return;
+                }
+                updateHatch('spacing', value);
+            });
+            const hatchAngle = document.getElementById('prop-hatch-angle');
+            if (hatchAngle) hatchAngle.addEventListener('change', (e) => {
+                const value = parseStrictFloat(e.target.value, NaN);
+                if (!Number.isFinite(value)) {
+                    updatePropertiesPalette();
+                    showToast('Hatch angle must be a number.', 'error', 1800);
+                    return;
+                }
+                updateHatch('angle', value);
+            });
+            const hatchSide = document.getElementById('prop-hatch-side');
+            if (hatchSide) hatchSide.addEventListener('change', (e) => updateHatch('sideSign', Number(e.target.value) < 0 ? -1 : 1));
+        }
+
+        if (selectedEntity.type === 'dimension') {
+            bindInput('prop-dimension-x1', value => { selectedEntity.x1 = value; updatePropertiesPalette(); });
+            bindInput('prop-dimension-y1', value => { selectedEntity.y1 = value; updatePropertiesPalette(); });
+            bindInput('prop-dimension-x2', value => { selectedEntity.x2 = value; updatePropertiesPalette(); });
+            bindInput('prop-dimension-y2', value => { selectedEntity.y2 = value; updatePropertiesPalette(); });
+
+            const dimensionDistanceInput = document.getElementById('prop-dimension-distance');
+            if (dimensionDistanceInput) dimensionDistanceInput.addEventListener('change', (e) => {
+                const newDistance = parseStrictFloat(e.target.value, NaN);
+                const dx = selectedEntity.x2 - selectedEntity.x1;
+                const dy = selectedEntity.y2 - selectedEntity.y1;
+                const currentDistance = Math.hypot(dx, dy);
+                if (!Number.isFinite(newDistance) || newDistance <= 0 || currentDistance < 1e-9) {
+                    updatePropertiesPalette();
+                    showToast('Distance must be greater than zero.', 'error', 1800);
+                    return;
+                }
+                saveState();
+                selectedEntity.x2 = selectedEntity.x1 + dx / currentDistance * newDistance;
+                selectedEntity.y2 = selectedEntity.y1 + dy / currentDistance * newDistance;
+                updatePropertiesPalette();
+                render();
+                showToast('Dimension distance updated.', 'success', 1500);
+            });
+
+            const dimensionOffsetInput = document.getElementById('prop-dimension-offset');
+            if (dimensionOffsetInput) dimensionOffsetInput.addEventListener('change', (e) => {
+                const newOffset = parseStrictFloat(e.target.value, NaN);
+                const dx = selectedEntity.x2 - selectedEntity.x1;
+                const dy = selectedEntity.y2 - selectedEntity.y1;
+                const currentDistance = Math.hypot(dx, dy);
+                if (!Number.isFinite(newOffset) || currentDistance < 1e-9) {
+                    updatePropertiesPalette();
+                    showToast('Position offset must be a number.', 'error', 1800);
+                    return;
+                }
+                saveState();
+                selectedEntity.offset = newOffset;
+                selectedEntity.textX = (selectedEntity.x1 + selectedEntity.x2) / 2 - dy / currentDistance * newOffset;
+                selectedEntity.textY = (selectedEntity.y1 + selectedEntity.y2) / 2 + dx / currentDistance * newOffset;
+                updatePropertiesPalette();
+                render();
+                showToast('Dimension position updated.', 'success', 1500);
+            });
+
+            bindInput('prop-dimension-text-x', value => {
+                selectedEntity.textX = value;
+                updatePropertiesPalette();
+            });
+            bindInput('prop-dimension-text-y', value => {
+                selectedEntity.textY = value;
+                updatePropertiesPalette();
+            });
+
+            const dimensionDecimalsSelect = document.getElementById('prop-dimension-decimals');
+            if (dimensionDecimalsSelect) dimensionDecimalsSelect.addEventListener('change', (e) => {
+                saveState();
+                selectedEntity.decimals = Number(e.target.value);
+                updatePropertiesPalette();
+                render();
+                showToast('Dimension decimals updated.', 'success', 1500);
+            });
+        } else if (selectedEntity.type === 'line') {
             bindInput('prop-x1', v => { selectedEntity.x1 = v; updatePropertiesPalette(); });
             bindInput('prop-y1', v => { selectedEntity.y1 = v; updatePropertiesPalette(); });
             bindInput('prop-x2', v => { selectedEntity.x2 = v; updatePropertiesPalette(); });
@@ -3476,6 +4733,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const mouseScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
         const mouseWorld = screenToWorld(mouseScreen.x, mouseScreen.y);
 
+        if (e.button === 0 && isImageCaptureMode) {
+            imageCaptureSelection = { start: mouseScreen, current: mouseScreen };
+            canvas.style.cursor = 'crosshair';
+            render();
+            return;
+        }
+
         // Calculate snap at mousedown for initial coordinates when drawing
         if (e.button === 0 && currentTool !== 'select') {
             const exclude = activeGrip ? activeGrip.entity : null;
@@ -3488,6 +4752,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (e.button === 0) {
+            if (hatchCommand) {
+                const sidePoint = screenToWorld(mouseScreen.x, mouseScreen.y);
+                const sideSign = getHatchSideSign(hatchCommand.entity, sidePoint);
+                if (sideSign === null) {
+                    showToast('Click clearly on one side of the object.', 'warning', 1800);
+                    return;
+                }
+                saveState();
+                hatchCommand.entity.hatch = {
+                    pattern: 'diagonal',
+                    spacing: 10,
+                    angle: 45,
+                    distance: hatchCommand.distance,
+                    sideSign
+                };
+                hatchCommand = null;
+                statusMode.innerText = 'MODE: SELECT';
+                updatePropertiesPalette();
+                render();
+                showToast('Hatch created.', 'success', 1500);
+                return;
+            }
+            if (dimensionCommand) {
+                const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
+                if (!dimensionCommand.firstPoint) {
+                    dimensionCommand.firstPoint = commandPoint;
+                    statusMode.innerText = 'DIMENSION: SECOND POINT';
+                    showToast('Select the second point.', 'info', 2200);
+                    render();
+                    return;
+                }
+                if (!dimensionCommand.secondPoint) {
+                    dimensionCommand.secondPoint = commandPoint;
+                    statusMode.innerText = 'DIMENSION: POSITION';
+                    showToast('Click where the dimension line should appear.', 'info', 2200);
+                    render();
+                    return;
+                }
+                const dimension = createDistanceDimension(
+                    dimensionCommand.firstPoint,
+                    dimensionCommand.secondPoint,
+                    mouseWorld
+                );
+                if (!dimension) {
+                    showToast('The two dimension points must be different.', 'error', 1800);
+                    dimensionCommand = null;
+                    statusMode.innerText = 'MODE: SELECT';
+                    render();
+                    return;
+                }
+                saveState();
+                entities.push(dimension);
+                dimensionCommand = null;
+                selectedEntity = dimension;
+                selectedEntities = new Set([dimension]);
+                selectedSegmentIndex = null;
+                statusMode.innerText = 'MODE: SELECT';
+                updatePropertiesPalette();
+                render();
+                triggerAutoSave();
+                showToast('Distance dimension created.', 'success', 1500);
+                return;
+            }
+            if (offsetCommand) {
+                const sidePoint = screenToWorld(mouseScreen.x, mouseScreen.y);
+                const offsetEntity = getOffsetEntity(offsetCommand.source, offsetCommand.distance, sidePoint);
+                if (!offsetEntity) {
+                    showToast('Offset could not be created at that distance.', 'error', 1800);
+                    offsetCommand = null;
+                    statusMode.innerText = 'MODE: SELECT';
+                    render();
+                    return;
+                }
+                saveState();
+                entities.push(offsetEntity);
+                offsetCommand = null;
+                selectedEntity = offsetEntity;
+                selectedEntities = new Set([offsetEntity]);
+                selectedSegmentIndex = offsetEntity.type === 'pline' ? 0 : null;
+                statusMode.innerText = 'MODE: SELECT';
+                updatePropertiesPalette();
+                render();
+                triggerAutoSave();
+                showToast('Offset created.', 'success', 1500);
+                return;
+            }
             if (moveCommand) {
                 const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
                 if (!moveCommand.basePoint) {
@@ -3555,6 +4905,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 const hit = hitTestEntity(mouseWorld, mouseScreen);
                 if (hit) {
+                    if (hit.hatch) {
+                        selectedHatch = hit.hatch;
+                        selectedEntity = hit.entity;
+                        selectedEntities.clear();
+                        selectedSegmentIndex = null;
+                        activeMove = null;
+                        updatePropertiesPalette();
+                        render();
+                        return;
+                    }
+                    selectedHatch = null;
                     if (e.shiftKey) {
                         if (selectedEntities.has(hit.entity)) {
                             selectedEntities.delete(hit.entity);
@@ -3580,9 +4941,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         };
                     }
                 } else {
+                    selectedHatch = null;
                     selectionBoxStart = mouseWorld;
                     selectionBoxCurrent = mouseWorld;
                     isSelectingBox = true;
+                    selectionBoxMoved = false;
                     if (!e.shiftKey) {
                         selectedEntities.clear();
                         selectedEntity = null;
@@ -3706,6 +5069,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
 
+        if (imageCaptureSelection) {
+            imageCaptureSelection.current = {
+                x: Math.max(0, Math.min(canvas.width, sx)),
+                y: Math.max(0, Math.min(canvas.height, sy))
+            };
+            render();
+            return;
+        }
+
         if (pastePreview) {
             pastePreview.target = screenToWorld(sx, sy);
             render();
@@ -3722,6 +5094,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (isSelectingBox) {
             selectionBoxCurrent = screenToWorld(sx, sy);
+            selectionBoxMoved = Math.hypot(
+                selectionBoxCurrent.x - selectionBoxStart.x,
+                selectionBoxCurrent.y - selectionBoxStart.y
+            ) * camera.zoom >= 4;
             render();
             return;
         }
@@ -3782,30 +5158,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             applyGripModification(activeGrip, targetPt);
         }
 
-        if (isDrawing || activeSnap || activeGrip || hoveredGrip || isSelectingBox) render();
+        if (isDrawing || dimensionCommand || activeSnap || activeGrip || hoveredGrip || isSelectingBox) render();
     });
 
     window.addEventListener('mouseup', (e) => {
+        if (imageCaptureSelection && e.button === 0) {
+            const rect = canvas.getBoundingClientRect();
+            const selection = imageCaptureSelection;
+            selection.current = {
+                x: Math.max(0, Math.min(canvas.width, e.clientX - rect.left)),
+                y: Math.max(0, Math.min(canvas.height, e.clientY - rect.top))
+            };
+            imageCaptureSelection = null;
+            isImageCaptureMode = false;
+            canvas.style.cursor = 'default';
+            statusMode.innerText = imageCapturePreviousStatus;
+            render();
+            copyCanvasRegionAsJpg(selection.start, selection.current);
+            return;
+        }
         if (isPanning) {
             isPanning = false;
-            triggerAutoSave();
         }
         if (isSelectingBox) {
             const rect = canvas.getBoundingClientRect();
             selectionBoxCurrent = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-            const boxStart = selectionBoxStart;
-            const boxEnd = selectionBoxCurrent;
-            const boxMatches = entities.filter(entity => isEntityInSelectionBox(entity, boxStart, boxEnd));
-            if (e.shiftKey) {
-                boxMatches.forEach(entity => selectedEntities.add(entity));
-            } else {
-                selectedEntities = new Set(boxMatches);
+            const moved = Math.hypot(
+                selectionBoxCurrent.x - selectionBoxStart.x,
+                selectionBoxCurrent.y - selectionBoxStart.y
+            ) * camera.zoom >= 4 || selectionBoxMoved;
+            if (moved) {
+                lastSelectionBox = {
+                    start: { ...selectionBoxStart },
+                    end: { ...selectionBoxCurrent }
+                };
+                const boxStart = selectionBoxStart;
+                const boxEnd = selectionBoxCurrent;
+                const boxMatches = entities.filter(entity => isEntityInSelectionBox(entity, boxStart, boxEnd));
+                if (e.shiftKey) {
+                    boxMatches.forEach(entity => selectedEntities.add(entity));
+                } else {
+                    selectedEntities = new Set(boxMatches);
+                }
+                selectedEntity = boxMatches[boxMatches.length - 1] || selectedEntities.values().next().value || null;
             }
-            selectedEntity = boxMatches[boxMatches.length - 1] || selectedEntities.values().next().value || null;
             selectedSegmentIndex = null;
             isSelectingBox = false;
             selectionBoxStart = null;
             selectionBoxCurrent = null;
+            selectionBoxMoved = false;
             updatePropertiesPalette();
             render();
             return;
@@ -3850,7 +5251,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         localStorage.setItem('cad_zoom', String(camera.zoom));
         statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
-        triggerAutoSave();
         render();
     }, { passive: false });
 
@@ -3867,6 +5267,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     lineWidthSelect.addEventListener('change', () => {
         triggerAutoSave();
     });
+
+    // Copy a user-dragged canvas crop as JPEG, with a download fallback when clipboard access is blocked.
+    function copyCanvasRegionAsJpg(start, end) {
+        const sourceX = Math.max(0, Math.min(start.x, end.x));
+        const sourceY = Math.max(0, Math.min(start.y, end.y));
+        const sourceRight = Math.min(canvas.width, Math.max(start.x, end.x));
+        const sourceBottom = Math.min(canvas.height, Math.max(start.y, end.y));
+        const width = Math.floor(sourceRight - sourceX);
+        const height = Math.floor(sourceBottom - sourceY);
+        if (width < 2 || height < 2) {
+            showToast('The capture area is too small.', 'warning', 1800);
+            return;
+        }
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = width;
+        exportCanvas.height = height;
+        const exportContext = exportCanvas.getContext('2d');
+        exportContext.fillStyle = '#121212';
+        exportContext.fillRect(0, 0, width, height);
+        exportContext.drawImage(canvas, sourceX, sourceY, width, height, 0, 0, width, height);
+        let dataUrl;
+        try {
+            dataUrl = exportCanvas.toDataURL('image/jpeg', 0.92);
+        } catch (error) {
+            showToast('Could not create JPG image.', 'error', 1800);
+            return;
+        }
+
+        const base64 = dataUrl.split(',')[1];
+        const bytes = Uint8Array.from(atob(base64), character => character.charCodeAt(0));
+        const blob = new Blob([bytes], { type: 'image/jpeg' });
+        const downloadFallback = () => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'cad-selection.jpg';
+            link.click();
+            URL.revokeObjectURL(link.href);
+            showToast('Clipboard denied. JPG downloaded instead.', 'warning', 2500);
+        };
+
+        if (!navigator.clipboard || typeof ClipboardItem === 'undefined' || !window.isSecureContext) {
+            downloadFallback();
+            return;
+        }
+        navigator.clipboard.write([new ClipboardItem({ 'image/jpeg': blob })])
+            .then(() => showToast('Selection copied to clipboard as JPG.', 'success', 1800))
+            .catch(downloadFallback);
+    }
+
+    function startImageCapture() {
+        imageCaptureSelection = null;
+        isImageCaptureMode = true;
+        imageCapturePreviousStatus = statusMode.innerText;
+        statusMode.innerText = 'JPG CAPTURE: DRAG AREA';
+        canvas.style.cursor = 'crosshair';
+        showToast('Drag over the area to copy as JPG. Press Escape to cancel.', 'info', 2500);
+        render();
+    }
+
+    document.getElementById('btn-copy-jpg').addEventListener('click', startImageCapture);
 
     // DXF Export Button Event (Full Payload with Units)
     document.getElementById('btn-export-dxf').addEventListener('click', () => {
@@ -3885,13 +5346,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         actionInput.value = 'export_dxf';
         form.appendChild(actionInput);
 
+        const fileInput = document.createElement('input');
+        fileInput.type = 'hidden';
+        fileInput.name = 'file';
+        fileInput.value = drawingFileName.value.trim();
+        form.appendChild(fileInput);
+
         const dataInput = document.createElement('input');
         dataInput.type = 'hidden';
         dataInput.name = 'data';
         dataInput.value = JSON.stringify({ 
             entities: entities,
-            angleUnit: angleUnitsSelect.value
+            angleUnit: angleUnitsSelect.value,
+            printScale: Number(printScaleSelect.value)
         });
+        const scaleInput = document.createElement('input');
+        scaleInput.type = 'hidden';
+        scaleInput.name = 'printScale';
+        scaleInput.value = printScaleSelect.value;
+        form.appendChild(scaleInput);
         form.appendChild(dataInput);
 
         document.body.appendChild(form);
@@ -3903,6 +5376,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     window.addEventListener('keydown', (e) => {
         const editingText = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+        if ((e.key === 'h' || e.key === 'H') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startHatchCommand();
+            return;
+        }
+        if ((e.key === 'd' || e.key === 'D') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startDimensionCommand();
+            return;
+        }
+        if ((e.key === 'o' || e.key === 'O') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startOffsetCommand();
+            return;
+        }
         if ((e.key === 'm' || e.key === 'M') && !editingText && currentTool === 'select') {
             e.preventDefault();
             startMoveCommand();
@@ -3976,6 +5464,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 finishPline(true);
             }
         } else if (e.key === 'Escape') {
+            if (isImageCaptureMode) {
+                imageCaptureSelection = null;
+                isImageCaptureMode = false;
+                canvas.style.cursor = 'default';
+                statusMode.innerText = imageCapturePreviousStatus;
+                render();
+                showToast('JPG capture cancelled.', 'info', 1200);
+                return;
+            }
+            if (hatchCommand) {
+                hatchCommand = null;
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Hatch cancelled.', 'info', 1200);
+                return;
+            }
+            if (dimensionCommand) {
+                dimensionCommand = null;
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Dimension cancelled.', 'info', 1200);
+                return;
+            }
+            if (offsetCommand) {
+                offsetCommand = null;
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Offset cancelled.', 'info', 1200);
+                return;
+            }
             if (moveCommand) {
                 moveCommand = null;
                 statusMode.innerText = 'MODE: SELECT';
@@ -4007,6 +5525,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             switchToSelectMode(null);
             showToast('Action cancelled / Selection cleared.', 'info', 1500);
         } else if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (selectedHatch && !editingText) {
+                saveState();
+                selectedHatch.hatch = null;
+                selectedHatch = null;
+                selectedEntity = null;
+                selectedEntities.clear();
+                updatePropertiesPalette();
+                render();
+                showToast('Hatch deleted.', 'warning', 1500);
+                return;
+            }
             if (selectedEntities.size && !editingText) {
                 saveState();
                 entities = entities.filter(ent => !selectedEntities.has(ent));
@@ -4102,54 +5631,152 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     document.getElementById('btn-move').addEventListener('click', startMoveCommand);
+    document.getElementById('btn-offset').addEventListener('click', startOffsetCommand);
+    document.getElementById('btn-dimension').addEventListener('click', startDimensionCommand);
+    document.getElementById('btn-hatch').addEventListener('click', startHatchCommand);
 
-    function autoLoad() {
+    saveButton.addEventListener('click', () => {
+        clearTimeout(autoSaveTimer);
+        saveDrawing(true)
+            .then(() => showToast('Drawing saved.', 'success', 1500))
+            .catch(error => showToast(error.message, 'error', 2500));
+    });
+
+    renameButton.addEventListener('click', () => {
+        const newFileName = window.prompt('New drawing name:', drawingFileName.value);
+        if (newFileName === null || !newFileName.trim()) return;
         const formData = new FormData();
-        formData.append('action', 'load');
+        formData.append('action', 'rename');
+        formData.append('file', drawingFileName.value.trim());
+        formData.append('newFile', newFileName.trim());
+        renameButton.disabled = true;
         fetch(apiEndpoint, { method: 'POST', body: formData })
             .then(res => res.json())
             .then(res => {
-                if (res.status === 'success' && res.data) {
-                    if (Array.isArray(res.data)) {
-                        entities = res.data;
-                    } else {
-                        entities = res.data.entities || [];
-                        if (res.data.angleUnit) {
-                            angleUnitsSelect.value = res.data.angleUnit;
-                            localStorage.setItem('cad_angle_unit', res.data.angleUnit);
-                        }
-                        if (Number.isFinite(Number(res.data.zoom))) {
-                            camera.zoom = Math.max(0.05, Math.min(Number(res.data.zoom), 100));
-                            localStorage.setItem('cad_zoom', String(camera.zoom));
-                            statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
-                        }
-                        if (Number.isFinite(Number(res.data.propertiesWidth))) {
-                            const propertiesWidth = Math.max(240, Math.min(600, Number(res.data.propertiesWidth)));
-                            propertiesPalette.style.width = `${propertiesWidth}px`;
-                            propertiesPalette.style.flexBasis = `${propertiesWidth}px`;
-                        }
-                        resize();
-                        if (Number.isFinite(Number(res.data.viewCenterX)) && Number.isFinite(Number(res.data.viewCenterY))) {
-                            let viewCenterX = Number(res.data.viewCenterX);
-                            if (Number(res.data.viewCenterVersion) !== 2) {
-                                viewCenterX -= canvas.width / (2 * camera.zoom);
-                            }
-                            camera.x = -viewCenterX * camera.zoom;
-                            camera.y = Number(res.data.viewCenterY) * camera.zoom;
-                        }
-                        if (['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
-                            lineWidthSelect.value = String(res.data.lineWidth);
-                        }
-                    }
-                    resize();
+                if (res.status !== 'success') throw new Error(res.message || 'Rename failed.');
+                drawingFileName.value = res.fileName;
+                refreshDrawingList(res.fileName);
+                showToast(`Drawing renamed to ${res.fileName}.`, 'success', 2000);
+            })
+            .catch(error => showToast(error.message, 'error', 2500))
+            .finally(() => { renameButton.disabled = false; });
+    });
+
+    function applyLoadedDrawing(res, entitiesOnly = false, fitInitialView = false) {
+        if (res.status === 'success' && res.data) {
+            lastKnownRevision = res.revision || lastKnownRevision;
+            lastKnownEntityRevision = res.entityRevision || lastKnownEntityRevision;
+            localChangesPending = false;
+            undoStack = [];
+            redoStack = [];
+            updateHistoryButtons();
+            if (res.fileName) drawingFileName.value = res.fileName;
+            if (Array.isArray(res.data)) {
+                entities = res.data;
+            } else {
+                entities = res.data.entities || [];
+                if (!entitiesOnly && res.data.angleUnit) {
+                    angleUnitsSelect.value = res.data.angleUnit;
+                    localStorage.setItem('cad_angle_unit', res.data.angleUnit);
                 }
+                if (!entitiesOnly && Number.isFinite(Number(res.data.zoom))) {
+                    camera.zoom = Math.max(0.05, Math.min(Number(res.data.zoom), 100));
+                    localStorage.setItem('cad_zoom', String(camera.zoom));
+                    statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
+                }
+                if (!entitiesOnly && Number.isFinite(Number(res.data.propertiesWidth))) {
+                    const propertiesWidth = Math.max(240, Math.min(600, Number(res.data.propertiesWidth)));
+                    propertiesPalette.style.width = `${propertiesWidth}px`;
+                    propertiesPalette.style.flexBasis = `${propertiesWidth}px`;
+                }
+                if (!entitiesOnly) resize();
+                const hasSavedView = Number.isFinite(Number(res.data.viewCenterX)) && Number.isFinite(Number(res.data.viewCenterY));
+                if (!entitiesOnly && hasSavedView) {
+                    let viewCenterX = Number(res.data.viewCenterX);
+                    if (Number(res.data.viewCenterVersion) !== 2) {
+                        viewCenterX -= canvas.width / (2 * camera.zoom);
+                    }
+                    camera.x = -viewCenterX * camera.zoom;
+                    camera.y = Number(res.data.viewCenterY) * camera.zoom;
+                }
+                if (fitInitialView && !hasSavedView && entities.length > 0) {
+                    zoomToExtents();
+                }
+                if (!entitiesOnly && ['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
+                    lineWidthSelect.value = String(res.data.lineWidth);
+                }
+            }
+            selectedEntity = null;
+            selectedEntities.clear();
+            updatePropertiesPalette();
+            resize();
+            render();
+        }
+    }
+
+    function loadDrawing(fileName, remoteRefresh = false, fitInitialView = false) {
+        const formData = new FormData();
+        formData.append('action', 'load');
+        formData.append('file', fileName);
+        fetch(apiEndpoint, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status !== 'success') throw new Error(res.message || 'Load failed.');
+                applyLoadedDrawing(res, remoteRefresh, fitInitialView);
+                refreshDrawingList(res.fileName);
+                updatePresence();
+                if (!remoteRefresh) showToast(`Loaded ${res.fileName}.`, 'success', 1500);
+            })
+            .catch(error => showToast(error.message, 'error', 2500));
+    }
+
+    // Poll the shared drawing for external edits while no local edit is in progress.
+    function checkForRemoteChanges() {
+        if (localChangesPending || isDrawing || activeMove || activeGrip) return;
+        const formData = new FormData();
+        formData.append('action', 'check');
+        formData.append('file', drawingFileName.value.trim());
+        fetch(apiEndpoint, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status !== 'success' || !res.entityRevision || res.entityRevision === lastKnownEntityRevision) return;
+                loadDrawing(drawingFileName.value.trim(), true);
             })
             .catch(() => {});
     }
 
+    function refreshDrawingList(selectedFile = drawingFileName.value) {
+        const formData = new FormData();
+        formData.append('action', 'list');
+        fetch(apiEndpoint, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(res => {
+                if (res.status !== 'success') throw new Error('Could not list drawings.');
+                drawingFileSelect.replaceChildren();
+                res.files.forEach(fileName => {
+                    const option = new Option(fileName, fileName);
+                    option.selected = fileName === selectedFile;
+                    drawingFileSelect.add(option);
+                });
+                if (!res.files.length) drawingFileSelect.add(new Option('No drawings found', ''));
+            })
+            .catch(() => {});
+    }
+
+    drawingFileSelect.addEventListener('change', () => {
+        if (!drawingFileSelect.value) return;
+        if (drawingFileSelect.value === drawingFileName.value || window.confirm('Load this drawing and discard unsaved changes?')) {
+            loadDrawing(drawingFileSelect.value);
+        }
+    });
+
     statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
     resize();
-    autoLoad();
+    refreshDrawingList();
+    loadDrawing(drawingFileName.value, false, true);
+    updatePresence();
+    window.setInterval(updatePresence, 5000);
+    window.setInterval(checkForRemoteChanges, 3000);
 })();
 </script>
 </body>
