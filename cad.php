@@ -1497,15 +1497,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="tool-line" class="tool-btn icon-btn" data-tool="line" title="Line"><svg viewBox="0 0 24 24"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/></svg><span class="sr-only">Line</span></button>
         <button id="tool-pline" class="tool-btn icon-btn" data-tool="pline" title="Polyline (PL)"><svg viewBox="0 0 24 24"><path d="M4 18l5-7 5 3 6-8"/><circle cx="4" cy="18" r="1.5"/><circle cx="9" cy="11" r="1.5"/><circle cx="14" cy="14" r="1.5"/><circle cx="20" cy="6" r="1.5"/></svg><span class="sr-only">Polyline</span></button>
         <button id="tool-rect" class="tool-btn icon-btn" data-tool="rect" title="Rectangle"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14"/><path d="M4 5h3M4 5v3M20 19h-3M20 19v-3"/></svg><span class="sr-only">Rectangle</span></button>
-        <button id="tool-circle" class="tool-btn icon-btn" data-tool="circle" title="Circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span class="sr-only">Circle</span></button>
-        <button id="tool-arc" class="tool-btn icon-btn" data-tool="arc" title="Arc"><svg viewBox="0 0 24 24"><path d="M4 17a9 9 0 0 1 13-10"/><path d="M4 17l-1-5M4 17l5-1"/><circle cx="4" cy="17" r="1.5"/></svg><span class="sr-only">Arc</span></button>
-        <button id="tool-ellipse" class="tool-btn icon-btn" data-tool="ellipse" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="5"/><path d="M4 12h16M12 7v10"/></svg><span class="sr-only">Ellipse</span></button>
+        <button id="tool-circle" class="tool-btn icon-btn" data-tool="circle" title="Circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/></svg><span class="sr-only">Circle</span></button>
+        <button id="tool-arc" class="tool-btn icon-btn" data-tool="arc" title="Arc"><svg viewBox="0 0 24 24"><path d="M4 17a9 9 0 0 1 13-10"/></svg><span class="sr-only">Arc</span></button>
+        <button id="tool-ellipse" class="tool-btn icon-btn" data-tool="ellipse" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="5"/></svg><span class="sr-only">Ellipse</span></button>
         <button id="tool-point" class="tool-btn icon-btn" data-tool="point" title="Point"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg><span class="sr-only">Point</span></button>
         <button id="btn-import-points" class="icon-btn" title="Import Points"><svg viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M4 7V4h5M20 7V4h-5"/></svg><span class="sr-only">Import Points</span></button>
         <button id="btn-generate-contours" class="icon-btn" title="Generate 1 m Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate 1 m Contours</span></button>
         <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
-        <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M5 17V7h10"/><path d="M9 21h10V11"/><path d="M5 17l4 4M15 7l4 4"/></svg><span class="sr-only">Offset</span></button>
-        <button id="btn-dimension" class="icon-btn" title="Distance dimension (D)"><svg viewBox="0 0 24 24"><path d="M5 5v14M19 5v14M8 9l-3-4-3 4M16 15l3 4 3-4"/><path d="M5 12h14"/></svg><span class="sr-only">Distance dimension</span></button>
+        <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H4z"/><path d="M8 16V8h8v8H8z"/></svg><span class="sr-only">Offset</span></button>
+        <button id="btn-trim" class="icon-btn" title="Trim selected object (T)"><svg viewBox="0 0 24 24"><path d="M5 17L17 5"/><path d="M8 9l2 2M14 15l3 3"/><path d="M4 12h4M16 12h4"/><circle cx="17" cy="5" r="2"/><circle cx="5" cy="17" r="2"/></svg><span class="sr-only">Trim</span></button>
+        <button id="btn-dimension" class="icon-btn" title="Distance dimension (D)"><svg viewBox="0 0 24 24"><path d="M6 17L18 9M6 17l4-1M6 17l2-3M18 9l-4 1M18 9l-2 3"/><path d="M4 20l3-5M17 9l3-5"/></svg><span class="sr-only">Distance dimension</span></button>
+        <button id="btn-angle-dimension" class="icon-btn" title="Angle dimension (A)"><svg viewBox="0 0 24 24"><path d="M6 16a8 8 0 0 1 8-8"/><path d="M6 16l8-8"/><path d="M8 18h10v-2H8z"/><circle cx="6" cy="16" r="1.5"/><circle cx="14" cy="8" r="1.5"/></svg><span class="sr-only">Angle dimension</span></button>
         <button id="btn-copy-jpg" class="icon-btn" title="Copy selection as JPG"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="9" cy="9" r="1.5"/><path d="M4 16l4-4 3 3 2-2 7 6"/></svg><span class="sr-only">Copy selection as JPG</span></button>
         <button id="btn-hatch" class="icon-btn" title="Hatch with offset (H)"><svg viewBox="0 0 24 24"><path d="M4 18L18 4M8 20L20 8M4 12L12 4"/><path d="M4 20h16V4H4z"/></svg><span class="sr-only">Hatch with offset</span></button>
     </div>
@@ -1587,7 +1589,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div id="point-import-modal" role="dialog" aria-modal="true" aria-labelledby="point-import-title">
     <div class="point-import-panel">
         <h3 id="point-import-title">Import Points</h3>
-        <textarea id="point-import-input" placeholder="One point per line: X,Y or X,Y,Z&#10;Tabs are also accepted"></textarea>
+        <textarea id="point-import-input" placeholder="One point per line: X,Y or X,Y,Z&#10;With point labels: P,X,Y or P,X,Y,Z&#10;Commas and tabs are accepted"></textarea>
+        <label><input type="checkbox" id="point-import-has-labels"> Point labels</label>
         <div class="point-import-actions">
             <button id="btn-cancel-point-import">Cancel</button>
             <button id="btn-apply-point-import" class="active">Add Points</button>
@@ -1849,14 +1852,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let activeMove = null;
     let moveCommand = null;
     let offsetCommand = null;
+    let trimCommand = null;
     let dimensionCommand = null;
+    let angleDimensionCommand = null;
     let hatchCommand = null;
     let lastMiddleClickTime = 0;
     let pastePreview = null;
 
     let undoStack = [];
     let redoStack = [];
-    const MAX_HISTORY = 50;
+    const MAX_HISTORY = 1000;
 
     let autoSaveTimer = null;
     let lastKnownRevision = null;
@@ -1987,14 +1992,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redoButton.disabled = redoStack.length === 0;
     }
 
+    function setActiveToolbarButton(buttonId = null) {
+        document.querySelectorAll('.tool-btn, .icon-btn').forEach(button => {
+            button.classList.toggle('active', button.id === buttonId);
+        });
+    }
+
     undoButton.addEventListener('click', executeUndo);
     redoButton.addEventListener('click', executeRedo);
 
     function switchToSelectMode(entityToSelect = null) {
         selectedHatch = null;
-        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-        const selectBtn = document.getElementById('tool-select');
-        if (selectBtn) selectBtn.classList.add('active');
+        setActiveToolbarButton('tool-select');
         currentTool = 'select';
         isDrawing = false;
         startPoint = null;
@@ -2020,15 +2029,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     const savedZoom = parseFloat(localStorage.getItem('cad_zoom'));
+    const MAX_ZOOM = 1000;
     let camera = {
         x: 0,
         y: 0,
-        zoom: Number.isFinite(savedZoom) ? Math.max(0.05, Math.min(savedZoom, 100)) : 1
+        zoom: Number.isFinite(savedZoom) ? Math.max(0.05, Math.min(savedZoom, MAX_ZOOM)) : 1
     };
     const GRID_SIZE = 50;
     const SNAP_TOLERANCE_PX = 14;
     const SELECT_TOLERANCE_PX = 8;
     const GRIP_HIT_RADIUS_PX = 8;
+    const MOVE_DRAG_THRESHOLD_PX = 4;
     if (localStorage.getItem('cad_properties_collapsed') === '1') setPropertiesCollapsed(true);
 
     function getGridSize() {
@@ -2296,6 +2307,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (delta === 0) delta = 2 * Math.PI;
                 const midAzi = normalizeAngle(ent.startAzi + delta / 2);
                 snaps.push({ x: ent.cx + ent.r * Math.sin(midAzi), y: ent.cy + ent.r * Math.cos(midAzi), type: 'midpoint' });
+            } else if (ent.type === 'dimension' && ent.kind === 'angle') {
+                const center = { x: ent.cx, y: ent.cy };
+                const start = getAngleDimensionRayEnd(ent, 'start');
+                const end = getAngleDimensionRayEnd(ent, 'end');
+                const textPosition = getDimensionTextPosition(ent);
+                snaps.push(
+                    { x: center.x, y: center.y, type: 'center' },
+                    { x: start.x, y: start.y, type: 'endpoint' },
+                    { x: end.x, y: end.y, type: 'endpoint' },
+                    { x: textPosition.x, y: textPosition.y, type: 'midpoint' }
+                );
+            } else if (ent.type === 'dimension') {
+                const textPosition = getDimensionTextPosition(ent);
+                snaps.push(
+                    { x: ent.x1, y: ent.y1, type: 'endpoint' },
+                    { x: ent.x2, y: ent.y2, type: 'endpoint' },
+                    { x: textPosition.x, y: textPosition.y, type: 'center' }
+                );
             } else if (ent.type === 'point') {
                 snaps.push({ x: ent.x, y: ent.y, type: 'endpoint' });
             }
@@ -2492,6 +2521,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (ent.type === 'point') {
             return [{ id: 'center', type: 'move', x: ent.x, y: ent.y }];
         }
+        if (ent.type === 'dimension' && ent.kind === 'angle') {
+            const start = getAngleDimensionRayEnd(ent, 'start');
+            const end = getAngleDimensionRayEnd(ent, 'end');
+            const textPosition = getDimensionTextPosition(ent);
+            return [
+                { id: 'center', type: 'dimension_center', label: 'Center', color: '#007acc', x: ent.cx, y: ent.cy },
+                { id: 'start', type: 'dimension_start', label: 'Ray 1', color: '#4caf50', x: start.x, y: start.y },
+                { id: 'end', type: 'dimension_end', label: 'Ray 2', color: '#ff9800', x: end.x, y: end.y },
+                { id: 'position', type: 'dimension_position', color: '#00e5ff', x: textPosition.x, y: textPosition.y }
+            ];
+        }
         if (ent.type === 'dimension') {
             const dx = ent.x2 - ent.x1;
             const dy = ent.y2 - ent.y1;
@@ -2592,6 +2632,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else if (ent.type === 'point') {
             ent.x = targetPt.x; ent.y = targetPt.y;
+        } else if (ent.type === 'dimension' && ent.kind === 'angle') {
+            if (grip.id === 'center') {
+                ent.cx = init.cx + dx; ent.cy = init.cy + dy;
+                ent.ray1X = (init.ray1X ?? getAngleDimensionRayEnd(init, 'start').x) + dx;
+                ent.ray1Y = (init.ray1Y ?? getAngleDimensionRayEnd(init, 'start').y) + dy;
+                ent.ray2X = (init.ray2X ?? getAngleDimensionRayEnd(init, 'end').x) + dx;
+                ent.ray2Y = (init.ray2Y ?? getAngleDimensionRayEnd(init, 'end').y) + dy;
+                ent.textX = (init.textX ?? getDimensionTextPosition(init).x) + dx;
+                ent.textY = (init.textY ?? getDimensionTextPosition(init).y) + dy;
+            } else if (grip.id === 'start') {
+                ent.ray1X = targetPt.x;
+                ent.ray1Y = targetPt.y;
+                ent.startAzi = calculateAzimuthRad(targetPt.x - ent.cx, targetPt.y - ent.cy);
+            } else if (grip.id === 'end') {
+                ent.ray2X = targetPt.x;
+                ent.ray2Y = targetPt.y;
+                ent.endAzi = calculateAzimuthRad(targetPt.x - ent.cx, targetPt.y - ent.cy);
+            } else if (grip.id === 'position') {
+                ent.textX = targetPt.x;
+                ent.textY = targetPt.y;
+            }
         } else if (ent.type === 'dimension') {
             if (grip.id === 'start') {
                 ent.x1 = targetPt.x; ent.y1 = targetPt.y;
@@ -2654,6 +2715,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else if (ent.type === 'point') {
                 const dist = Math.hypot(worldPt.x - ent.x, worldPt.y - ent.y);
                 if (dist * camera.zoom <= SELECT_TOLERANCE_PX + 4) return { entity: ent, segmentIndex: null };
+            } else if (ent.type === 'dimension' && ent.kind === 'angle') {
+                const textPosition = getDimensionTextPosition(ent);
+                const centerDist = Math.hypot(worldPt.x - ent.cx, worldPt.y - ent.cy);
+                const textDist = Math.hypot(worldPt.x - textPosition.x, worldPt.y - textPosition.y);
+                const ray1 = getAngleDimensionRayEnd(ent, 'start');
+                const ray2 = getAngleDimensionRayEnd(ent, 'end');
+                const ray1Distance = pointToSegmentDistance(worldPt.x, worldPt.y, ent.cx, ent.cy, ray1.x, ray1.y);
+                const ray2Distance = pointToSegmentDistance(worldPt.x, worldPt.y, ent.cx, ent.cy, ray2.x, ray2.y);
+                const azi = calculateAzimuthRad(worldPt.x - ent.cx, worldPt.y - ent.cy);
+                if ((Math.abs(centerDist - ent.r) * camera.zoom <= SELECT_TOLERANCE_PX + 6 && isAngleDimensionArcPoint(ent, azi)) ||
+                    textDist * camera.zoom <= 18 ||
+                    ray1Distance.dist * camera.zoom <= SELECT_TOLERANCE_PX + 4 ||
+                    ray2Distance.dist * camera.zoom <= SELECT_TOLERANCE_PX + 4) {
+                    return { entity: ent, segmentIndex: null };
+                }
             } else if (ent.type === 'dimension') {
                 const dx = ent.x2 - ent.x1;
                 const dy = ent.y2 - ent.y1;
@@ -2698,6 +2774,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         } else if (ent.type === 'point') {
             points.push({ x: ent.x, y: ent.y });
+        } else if (ent.type === 'dimension' && ent.kind === 'angle') {
+            points.push(
+                { x: ent.cx, y: ent.cy },
+                getAngleDimensionRayEnd(ent, 'start'),
+                getAngleDimensionRayEnd(ent, 'end'),
+                getDimensionTextPosition(ent)
+            );
         } else if (ent.type === 'dimension') {
             const dx = ent.x2 - ent.x1;
             const dy = ent.y2 - ent.y1;
@@ -2741,7 +2824,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const availableWidth = Math.max(canvas.width, 1);
             const availableHeight = Math.max(canvas.height, 1);
 
-            camera.zoom = Math.max(0.05, Math.min(availableWidth / width, availableHeight / height, 100));
+            camera.zoom = Math.max(0.05, Math.min(availableWidth / width, availableHeight / height, MAX_ZOOM));
             camera.x = -centerX * camera.zoom;
             camera.y = centerY * camera.zoom;
         }
@@ -2758,6 +2841,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const minY = Math.min(start.y, end.y);
         const maxX = Math.max(start.x, end.x);
         const maxY = Math.max(start.y, end.y);
+        if (end.x >= start.x) {
+            return bounds.minX >= minX && bounds.maxX <= maxX &&
+                bounds.minY >= minY && bounds.maxY <= maxY;
+        }
         return bounds.maxX >= minX && bounds.minX <= maxX && bounds.maxY >= minY && bounds.minY <= maxY;
     }
 
@@ -2774,8 +2861,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else if (ent.type === 'point') {
             ent.x += offsetX; ent.y += offsetY;
         } else if (ent.type === 'dimension') {
-            ent.x1 += offsetX; ent.y1 += offsetY;
-            ent.x2 += offsetX; ent.y2 += offsetY;
+            if (ent.kind === 'angle') {
+                const ray1End = getAngleDimensionRayEnd(ent, 'start');
+                const ray2End = getAngleDimensionRayEnd(ent, 'end');
+                const textPosition = getDimensionTextPosition(ent);
+                ent.cx += offsetX; ent.cy += offsetY;
+                ent.ray1X = ray1End.x + offsetX;
+                ent.ray1Y = ray1End.y + offsetY;
+                ent.ray2X = ray2End.x + offsetX;
+                ent.ray2Y = ray2End.y + offsetY;
+                ent.textX = textPosition.x + offsetX;
+                ent.textY = textPosition.y + offsetY;
+            } else {
+                ent.x1 += offsetX; ent.y1 += offsetY;
+                ent.x2 += offsetX; ent.y2 += offsetY;
+            }
         }
         return ent;
     }
@@ -2822,6 +2922,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             basePoint: null,
             targetPoint: null
         };
+        setActiveToolbarButton('btn-move');
         statusMode.innerText = 'MOVE: BASE POINT';
         showToast('Specify the base point.', 'info', 2200);
         render();
@@ -2954,8 +3055,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return;
         }
         offsetCommand = { source: selectedEntity, distance };
+        setActiveToolbarButton('btn-offset');
         statusMode.innerText = 'OFFSET: SIDE';
         showToast('Click the side for the offset.', 'info', 2200);
+        render();
+    }
+
+    function trimEntityAtPoint(entity, point) {
+        if (!entity || !point) return null;
+        const trimTolerance = Math.max(1e-4, 1.5 / Math.max(camera.zoom, 0.05));
+
+        if (entity.type === 'line') {
+            const start = { x: entity.x1, y: entity.y1 };
+            const end = { x: entity.x2, y: entity.y2 };
+            const projection = pointToSegmentDistance(point.x, point.y, start.x, start.y, end.x, end.y);
+            if (projection.dist > trimTolerance) return null;
+            const keepStart = Math.hypot(point.x - start.x, point.y - start.y) <= Math.hypot(point.x - end.x, point.y - end.y);
+            if (keepStart) {
+                return { ...entity, x2: projection.x, y2: projection.y };
+            }
+            return { ...entity, x1: projection.x, y1: projection.y };
+        }
+
+        if (entity.type === 'pline' && entity.points && entity.points.length >= 2) {
+            let bestSegmentIndex = -1;
+            let bestProjection = null;
+            let bestDistance = Infinity;
+            for (let index = 0; index < entity.points.length - 1; index++) {
+                const start = entity.points[index];
+                const end = entity.points[index + 1];
+                const projection = pointToSegmentDistance(point.x, point.y, start.x, start.y, end.x, end.y);
+                if (projection.dist < bestDistance) {
+                    bestDistance = projection.dist;
+                    bestSegmentIndex = index;
+                    bestProjection = projection;
+                }
+            }
+            if (bestSegmentIndex === -1 || !bestProjection || bestDistance > trimTolerance) return null;
+
+            const cutPoint = { x: bestProjection.x, y: bestProjection.y };
+            const keptPoints = entity.points.slice(0, bestSegmentIndex + 1);
+            if (keptPoints.length === 0) return null;
+            keptPoints.push(cutPoint);
+            return { ...entity, points: keptPoints, closed: false };
+        }
+
+        return null;
+    }
+
+    function startTrimCommand() {
+        if (!selectedEntity || selectedEntities.size !== 1) {
+            showToast('Select one line or polyline to trim.', 'warning', 1800);
+            return;
+        }
+        if (!['line', 'pline'].includes(selectedEntity.type)) {
+            showToast('Trim works on lines and polylines only.', 'warning', 1800);
+            return;
+        }
+        trimCommand = { source: selectedEntity };
+        setActiveToolbarButton('btn-trim');
+        statusMode.innerText = 'TRIM: PICK POINT';
+        showToast('Click the trim point along the selected object.', 'info', 2200);
         render();
     }
 
@@ -2968,6 +3128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const offset = (dimensionPoint.x - firstPoint.x) * normal.x + (dimensionPoint.y - firstPoint.y) * normal.y;
         return {
             type: 'dimension',
+            kind: 'distance',
             x1: firstPoint.x,
             y1: firstPoint.y,
             x2: secondPoint.x,
@@ -2981,7 +3142,148 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         };
     }
 
+    function createAngleDimension(vertex, firstPoint, secondPoint, textPoint) {
+        const dx1 = firstPoint.x - vertex.x;
+        const dy1 = firstPoint.y - vertex.y;
+        const dx2 = secondPoint.x - vertex.x;
+        const dy2 = secondPoint.y - vertex.y;
+        const length1 = Math.hypot(dx1, dy1);
+        const length2 = Math.hypot(dx2, dy2);
+        if (length1 < 1e-9 || length2 < 1e-9) return null;
+
+        let startAzi = calculateAzimuthRad(dx1, dy1);
+        let endAzi = calculateAzimuthRad(dx2, dy2);
+        let delta = normalizeAngle(endAzi - startAzi);
+        if (delta > Math.PI) delta = 2 * Math.PI - delta;
+        endAzi = startAzi + delta;
+
+        const radius = Math.max(6, Math.min(length1, length2) * 0.8);
+        const midAzi = startAzi + delta / 2;
+        const position = textPoint || {
+            x: vertex.x + Math.sin(midAzi) * (radius + 1.5),
+            y: vertex.y + Math.cos(midAzi) * (radius + 1.5)
+        };
+
+        return {
+            type: 'dimension',
+            kind: 'angle',
+            cx: vertex.x,
+            cy: vertex.y,
+            r: radius,
+            startAzi,
+            endAzi,
+            ray1X: firstPoint.x,
+            ray1Y: firstPoint.y,
+            ray2X: secondPoint.x,
+            ray2Y: secondPoint.y,
+            angleMode: 'interior',
+            textX: position.x,
+            textY: position.y,
+            decimals: 3,
+            color: document.getElementById('strokeColor').value,
+            width: Math.max(1, parseInt(document.getElementById('lineWidth').value))
+        };
+    }
+
+    function getAngleDimensionSweep(ent) {
+        const forwardSweep = normalizeAngle(ent.endAzi - ent.startAzi);
+        const interiorSweep = forwardSweep <= Math.PI ? forwardSweep : 2 * Math.PI - forwardSweep;
+        return ent.angleMode === 'exterior' ? 2 * Math.PI - interiorSweep : interiorSweep;
+    }
+
+    function getAngleDimensionArc(ent) {
+        const forwardSweep = normalizeAngle(ent.endAzi - ent.startAzi);
+        const interiorSweep = Math.min(forwardSweep, 2 * Math.PI - forwardSweep);
+        const interiorDirection = forwardSweep <= Math.PI ? 1 : -1;
+        const direction = ent.angleMode === 'exterior' ? -interiorDirection : interiorDirection;
+        return { direction, sweep: ent.angleMode === 'exterior' ? 2 * Math.PI - interiorSweep : interiorSweep };
+    }
+
+    function isAngleDimensionArcPoint(ent, azi) {
+        const arc = getAngleDimensionArc(ent);
+        const travelled = arc.direction > 0
+            ? normalizeAngle(azi - ent.startAzi)
+            : normalizeAngle(ent.startAzi - azi);
+        return travelled <= arc.sweep + 1e-9;
+    }
+
+    function setAngleDimensionMode(ent, mode) {
+        const textPosition = getDimensionTextPosition(ent);
+        const textRadius = Math.max(ent.r + 1.5, Math.hypot(textPosition.x - ent.cx, textPosition.y - ent.cy));
+        ent.angleMode = mode === 'exterior' ? 'exterior' : 'interior';
+        const arc = getAngleDimensionArc(ent);
+        const midAzi = ent.startAzi + arc.direction * arc.sweep / 2;
+        ent.textX = ent.cx + textRadius * Math.sin(midAzi);
+        ent.textY = ent.cy + textRadius * Math.cos(midAzi);
+    }
+
+    function setAngleDimensionValue(ent, value) {
+        const requestedSweep = azimuthValueToRad(value);
+        if (!Number.isFinite(requestedSweep) || requestedSweep <= 0 || requestedSweep >= 2 * Math.PI) return false;
+
+        const interiorSweep = ent.angleMode === 'exterior' ? 2 * Math.PI - requestedSweep : requestedSweep;
+        if (interiorSweep <= 0 || interiorSweep > Math.PI + 1e-9) return false;
+
+        const arc = getAngleDimensionArc(ent);
+        const ray2 = getAngleDimensionRayEnd(ent, 'end');
+        const ray2Length = Math.hypot(ray2.x - ent.cx, ray2.y - ent.cy);
+        ent.endAzi = ent.startAzi + arc.direction * interiorSweep;
+        ent.ray2X = ent.cx + ray2Length * Math.sin(ent.endAzi);
+        ent.ray2Y = ent.cy + ray2Length * Math.cos(ent.endAzi);
+
+        const textPosition = getDimensionTextPosition(ent);
+        const textRadius = Math.max(ent.r + 1.5, Math.hypot(textPosition.x - ent.cx, textPosition.y - ent.cy));
+        const updatedArc = getAngleDimensionArc(ent);
+        const midAzi = ent.startAzi + updatedArc.direction * updatedArc.sweep / 2;
+        ent.textX = ent.cx + textRadius * Math.sin(midAzi);
+        ent.textY = ent.cy + textRadius * Math.cos(midAzi);
+        return true;
+    }
+
+    function drawCurvedAngleDimensionText(center, textPosition, label, color) {
+        const radius = Math.hypot(textPosition.x - center.x, textPosition.y - center.y);
+        if (radius < 1) {
+            ctx.fillText(label, textPosition.x, textPosition.y);
+            return;
+        }
+
+        const centerAngle = Math.atan2(textPosition.y - center.y, textPosition.x - center.x);
+        const glyphWidths = [...label].map(character => ctx.measureText(character).width);
+        const totalAngle = glyphWidths.reduce((sum, width) => sum + width, 0) / radius;
+        let angle = centerAngle - totalAngle / 2;
+
+        glyphWidths.forEach((width, index) => {
+            const glyphAngle = angle + width / (2 * radius);
+            ctx.save();
+            ctx.translate(center.x + radius * Math.cos(glyphAngle), center.y + radius * Math.sin(glyphAngle));
+            ctx.rotate(glyphAngle + Math.PI / 2);
+            ctx.fillText(label[index], 0, 0);
+            ctx.restore();
+            angle += width / radius;
+        });
+    }
+
+    function getAngleDimensionRayEnd(ent, ray) {
+        const isStart = ray === 'start';
+        const x = isStart ? ent.ray1X : ent.ray2X;
+        const y = isStart ? ent.ray1Y : ent.ray2Y;
+        if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
+        const azi = isStart ? ent.startAzi : ent.endAzi;
+        return { x: ent.cx + ent.r * Math.sin(azi), y: ent.cy + ent.r * Math.cos(azi) };
+    }
+
     function getDimensionTextPosition(ent) {
+        if (ent && ent.kind === 'angle') {
+            if (Number.isFinite(ent.textX) && Number.isFinite(ent.textY)) {
+                return { x: ent.textX, y: ent.textY };
+            }
+            const arc = getAngleDimensionArc(ent);
+            const midAzi = ent.startAzi + arc.direction * arc.sweep / 2;
+            return {
+                x: ent.cx + ent.r * Math.sin(midAzi),
+                y: ent.cy + ent.r * Math.cos(midAzi)
+            };
+        }
         if (Number.isFinite(ent.textX) && Number.isFinite(ent.textY)) {
             return { x: ent.textX, y: ent.textY };
         }
@@ -3003,8 +3305,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function startDimensionCommand() {
         dimensionCommand = { firstPoint: null, secondPoint: null, dimensionPoint: null };
+        setActiveToolbarButton('btn-dimension');
         statusMode.innerText = 'DIMENSION: FIRST POINT';
         showToast('Select the first point.', 'info', 2200);
+        render();
+    }
+
+    function startAngleDimensionCommand() {
+        angleDimensionCommand = { vertex: null, firstPoint: null, secondPoint: null, textPoint: null };
+        setActiveToolbarButton('btn-angle-dimension');
+        statusMode.innerText = 'ANGLE DIMENSION: VERTEX';
+        showToast('Select the angle vertex.', 'info', 2200);
         render();
     }
 
@@ -3027,6 +3338,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return;
         }
         hatchCommand = { entity: selectedEntity, distance };
+        setActiveToolbarButton('btn-hatch');
         statusMode.innerText = 'HATCH: SIDE';
         showToast('Click the side for the hatch.', 'info', 2200);
         render();
@@ -3278,8 +3590,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 1.2;
             const size = isHot ? 9 : 7;
-            ctx.fillRect(sp.x - size / 2, sp.y - size / 2, size, size);
-            ctx.strokeRect(sp.x - size / 2, sp.y - size / 2, size, size);
+            if (ent.type === 'dimension' && (g.id === 'start' || g.id === 'end')) {
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, size / 2, 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                ctx.fillRect(sp.x - size / 2, sp.y - size / 2, size, size);
+                ctx.strokeRect(sp.x - size / 2, sp.y - size / 2, size, size);
+            }
 
             if (g.label) {
                 ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -3518,12 +3836,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
             ctx.fill();
 
+            if (ent.showText !== false) {
+                ctx.save();
+                ctx.font = '11px Consolas, monospace';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = isSelected ? '#00bfff' : (ent.color || '#fff');
+                ctx.fillText(`${ent.name || ''}:${formatCoord(ent.z || 0)}`, p.x + 8, p.y - 8);
+                ctx.restore();
+            }
+        }
+        else if (ent.type === 'dimension' && ent.kind === 'angle') {
+            const center = worldToScreen(ent.cx, ent.cy);
+            const ray1End = getAngleDimensionRayEnd(ent, 'start');
+            const ray2End = getAngleDimensionRayEnd(ent, 'end');
+            const ray1 = worldToScreen(ray1End.x, ray1End.y);
+            const ray2 = worldToScreen(ray2End.x, ray2End.y);
+            const start = worldToScreen(ent.cx + ent.r * Math.sin(ent.startAzi), ent.cy + ent.r * Math.cos(ent.startAzi));
+            const arc = getAngleDimensionArc(ent);
+            const endAzi = ent.startAzi + arc.direction * arc.sweep;
+            const end = worldToScreen(ent.cx + ent.r * Math.sin(endAzi), ent.cy + ent.r * Math.cos(endAzi));
+            const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
+            const endAngle = Math.atan2(end.y - center.y, end.x - center.x);
+            const angleValue = getAngleDimensionSweep(ent);
+            const label = `${azimuthRadToValue(angleValue).toFixed(getDimensionDecimals(ent))}${getAngleUnitLabel()}`;
+
+            ctx.save();
+            ctx.strokeStyle = ent.color || '#ffd166';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(center.x, center.y);
+            ctx.lineTo(ray1.x, ray1.y);
+            ctx.moveTo(center.x, center.y);
+            ctx.lineTo(ray2.x, ray2.y);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, ent.r * camera.zoom, startAngle, endAngle, arc.direction < 0);
+            ctx.stroke();
+            ctx.restore();
+
+            const textPosition = worldToScreen(getDimensionTextPosition(ent).x, getDimensionTextPosition(ent).y);
             ctx.save();
             ctx.font = '11px Consolas, monospace';
-            ctx.textAlign = 'left';
+            ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = isSelected ? '#00bfff' : (ent.color || '#fff');
-            ctx.fillText(`${ent.name || ''}:${formatCoord(ent.z || 0)}`, p.x + 8, p.y - 8);
+            ctx.fillStyle = ent.color || '#ffd166';
+            drawCurvedAngleDimensionText(center, textPosition, label, ent.color || '#ffd166');
             ctx.restore();
         }
         else if (ent.type === 'dimension') {
@@ -3531,6 +3890,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const dy = ent.y2 - ent.y1;
             const length = Math.hypot(dx, dy);
             if (length > 1e-9) {
+                const startPoint = worldToScreen(ent.x1, ent.y1);
+                const endPoint = worldToScreen(ent.x2, ent.y2);
                 const textWorldPosition = getDimensionTextPosition(ent);
                 const textPosition = worldToScreen(textWorldPosition.x, textWorldPosition.y);
                 const label = formatDimensionValue(ent, length);
@@ -3547,6 +3908,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'bottom';
                 ctx.fillText(label, 0, -3);
+                ctx.restore();
+
+                ctx.save();
+                ctx.strokeStyle = ent.color || '#ffd166';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.arc(startPoint.x, startPoint.y, 3.5, 0, Math.PI * 2);
+                ctx.moveTo(endPoint.x + 3.5, endPoint.y);
+                ctx.arc(endPoint.x, endPoint.y, 3.5, 0, Math.PI * 2);
+                ctx.stroke();
                 ctx.restore();
             }
         }
@@ -4324,33 +4695,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             `;
         } else if (selectedEntity.type === 'dimension') {
-            const dimensionLength = Math.hypot(selectedEntity.x2 - selectedEntity.x1, selectedEntity.y2 - selectedEntity.y1);
-            const dimensionAngle = azimuthRadToValue(calculateAzimuthRad(selectedEntity.x2 - selectedEntity.x1, selectedEntity.y2 - selectedEntity.y1));
-            const dimensionTextPosition = getDimensionTextPosition(selectedEntity);
-            const dimensionDecimals = getDimensionDecimals(selectedEntity);
-            html += `
-                <div class="prop-group">
-                    <div class="prop-group-title">Distance Dimension</div>
-                    <div class="prop-row"><label>Type</label><input type="text" readonly value="Distance"></div>
-                    <div class="prop-row"><label>Start X (P1)</label><input type="text" id="prop-dimension-x1" value="${formatCoord(selectedEntity.x1)}"></div>
-                    <div class="prop-row"><label>Start Y (P1)</label><input type="text" id="prop-dimension-y1" value="${formatCoord(selectedEntity.y1)}"></div>
-                    <div class="prop-row"><label>End X (P2)</label><input type="text" id="prop-dimension-x2" value="${formatCoord(selectedEntity.x2)}"></div>
-                    <div class="prop-row"><label>End Y (P2)</label><input type="text" id="prop-dimension-y2" value="${formatCoord(selectedEntity.y2)}"></div>
-                    <div class="prop-row"><label>Distance</label><input type="text" id="prop-dimension-distance" value="${formatDimensionValue(selectedEntity, dimensionLength)}"></div>
-                    <div class="prop-row"><label>Angle</label><input type="text" readonly value="${dimensionAngle.toFixed(4)} ${getAngleUnitLabel()}"></div>
-                    <div class="prop-row"><label>Position Offset</label><input type="text" id="prop-dimension-offset" value="${formatCoord(selectedEntity.offset)}"></div>
-                    <div class="prop-row"><label>Text X</label><input type="text" id="prop-dimension-text-x" value="${formatCoord(dimensionTextPosition.x)}"></div>
-                    <div class="prop-row"><label>Text Y</label><input type="text" id="prop-dimension-text-y" value="${formatCoord(dimensionTextPosition.y)}"></div>
-                    <div class="prop-row"><label>Decimals</label><select id="prop-dimension-decimals">
-                        ${[0, 1, 2, 3, 4, 5, 6].map(value => `<option value="${value}" ${value === dimensionDecimals ? 'selected' : ''}>${value}</option>`).join('')}
-                    </select></div>
-                </div>
-            `;
+            if (selectedEntity.kind === 'angle') {
+                const centerX = selectedEntity.cx;
+                const centerY = selectedEntity.cy;
+                const angleTextPosition = getDimensionTextPosition(selectedEntity);
+                const dimensionDecimals = getDimensionDecimals(selectedEntity);
+                const angleMode = selectedEntity.angleMode === 'exterior' ? 'exterior' : 'interior';
+                const angleValue = azimuthRadToValue(getAngleDimensionSweep(selectedEntity));
+                html += `
+                    <div class="prop-group">
+                        <div class="prop-group-title">Angle Dimension</div>
+                        <div class="prop-row"><label>Type</label><input type="text" readonly value="Angle"></div>
+                        <div class="prop-row"><label>Center X</label><input type="text" id="prop-angle-dimension-cx" value="${formatCoord(centerX)}"></div>
+                        <div class="prop-row"><label>Center Y</label><input type="text" id="prop-angle-dimension-cy" value="${formatCoord(centerY)}"></div>
+                        <div class="prop-row"><label>Radius</label><input type="text" id="prop-angle-dimension-r" value="${formatCoord(selectedEntity.r)}"></div>
+                        <div class="prop-row"><label>Angle</label><select id="prop-angle-dimension-mode">
+                            <option value="interior" ${angleMode === 'interior' ? 'selected' : ''}>Interior</option>
+                            <option value="exterior" ${angleMode === 'exterior' ? 'selected' : ''}>Exterior</option>
+                        </select></div>
+                        <div class="prop-row"><label>Value (${getAngleUnitLabel()})</label><input type="text" id="prop-angle-dimension-value" value="${angleValue.toFixed(4)}"></div>
+                        <div class="prop-row"><label>Text X</label><input type="text" id="prop-angle-dimension-text-x" value="${formatCoord(angleTextPosition.x)}"></div>
+                        <div class="prop-row"><label>Text Y</label><input type="text" id="prop-angle-dimension-text-y" value="${formatCoord(angleTextPosition.y)}"></div>
+                        <div class="prop-row"><label>Decimals</label><select id="prop-dimension-decimals">
+                            ${[0, 1, 2, 3, 4, 5, 6].map(value => `<option value="${value}" ${value === dimensionDecimals ? 'selected' : ''}>${value}</option>`).join('')}
+                        </select></div>
+                    </div>
+                `;
+            } else {
+                const dimensionLength = Math.hypot(selectedEntity.x2 - selectedEntity.x1, selectedEntity.y2 - selectedEntity.y1);
+                const dimensionAngle = azimuthRadToValue(calculateAzimuthRad(selectedEntity.x2 - selectedEntity.x1, selectedEntity.y2 - selectedEntity.y1));
+                const dimensionTextPosition = getDimensionTextPosition(selectedEntity);
+                const dimensionDecimals = getDimensionDecimals(selectedEntity);
+                html += `
+                    <div class="prop-group">
+                        <div class="prop-group-title">Distance Dimension</div>
+                        <div class="prop-row"><label>Type</label><input type="text" readonly value="Distance"></div>
+                        <div class="prop-row"><label>Start X (P1)</label><input type="text" id="prop-dimension-x1" value="${formatCoord(selectedEntity.x1)}"></div>
+                        <div class="prop-row"><label>Start Y (P1)</label><input type="text" id="prop-dimension-y1" value="${formatCoord(selectedEntity.y1)}"></div>
+                        <div class="prop-row"><label>End X (P2)</label><input type="text" id="prop-dimension-x2" value="${formatCoord(selectedEntity.x2)}"></div>
+                        <div class="prop-row"><label>End Y (P2)</label><input type="text" id="prop-dimension-y2" value="${formatCoord(selectedEntity.y2)}"></div>
+                        <div class="prop-row"><label>Distance</label><input type="text" id="prop-dimension-distance" value="${formatDimensionValue(selectedEntity, dimensionLength)}"></div>
+                        <div class="prop-row"><label>Angle</label><input type="text" readonly value="${dimensionAngle.toFixed(4)} ${getAngleUnitLabel()}"></div>
+                        <div class="prop-row"><label>Position Offset</label><input type="text" id="prop-dimension-offset" value="${formatCoord(selectedEntity.offset)}"></div>
+                        <div class="prop-row"><label>Text X</label><input type="text" id="prop-dimension-text-x" value="${formatCoord(dimensionTextPosition.x)}"></div>
+                        <div class="prop-row"><label>Text Y</label><input type="text" id="prop-dimension-text-y" value="${formatCoord(dimensionTextPosition.y)}"></div>
+                        <div class="prop-row"><label>Decimals</label><select id="prop-dimension-decimals">
+                            ${[0, 1, 2, 3, 4, 5, 6].map(value => `<option value="${value}" ${value === dimensionDecimals ? 'selected' : ''}>${value}</option>`).join('')}
+                        </select></div>
+                    </div>
+                `;
+            }
         } else if (selectedEntity.type === 'point') {
+            const pointShowText = selectedEntity.showText !== false;
             html += `
                 <div class="prop-group">
                     <div class="prop-group-title">Point Geometry</div>
                     <div class="prop-row"><label>Name</label><input type="text" id="prop-point-name" value="${selectedEntity.name || ''}"></div>
+                    <div class="prop-row"><label>Show Text</label><select id="prop-point-show-text">
+                        <option value="true" ${pointShowText ? 'selected' : ''}>Yes</option>
+                        <option value="false" ${pointShowText ? '' : 'selected'}>No</option>
+                    </select></div>
                     <div class="prop-row"><label>Position X</label><input type="text" id="prop-px" value="${formatCoord(selectedEntity.x)}"></div>
                     <div class="prop-row"><label>Position Y</label><input type="text" id="prop-py" value="${formatCoord(selectedEntity.y)}"></div>
                     <div class="prop-row"><label>Elevation Z</label><input type="text" id="prop-pz" value="${formatCoord(selectedEntity.z || 0)}"></div>
@@ -4440,67 +4844,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (selectedEntity.type === 'dimension') {
-            bindInput('prop-dimension-x1', value => { selectedEntity.x1 = value; updatePropertiesPalette(); });
-            bindInput('prop-dimension-y1', value => { selectedEntity.y1 = value; updatePropertiesPalette(); });
-            bindInput('prop-dimension-x2', value => { selectedEntity.x2 = value; updatePropertiesPalette(); });
-            bindInput('prop-dimension-y2', value => { selectedEntity.y2 = value; updatePropertiesPalette(); });
+            if (selectedEntity.kind === 'angle') {
+                bindInput('prop-angle-dimension-cx', value => { selectedEntity.cx = value; updatePropertiesPalette(); });
+                bindInput('prop-angle-dimension-cy', value => { selectedEntity.cy = value; updatePropertiesPalette(); });
+                bindInput('prop-angle-dimension-r', value => { selectedEntity.r = Math.max(0.001, value); updatePropertiesPalette(); });
+                bindInput('prop-angle-dimension-text-x', value => { selectedEntity.textX = value; updatePropertiesPalette(); });
+                bindInput('prop-angle-dimension-text-y', value => { selectedEntity.textY = value; updatePropertiesPalette(); });
 
-            const dimensionDistanceInput = document.getElementById('prop-dimension-distance');
-            if (dimensionDistanceInput) dimensionDistanceInput.addEventListener('change', (e) => {
-                const newDistance = parseStrictFloat(e.target.value, NaN);
-                const dx = selectedEntity.x2 - selectedEntity.x1;
-                const dy = selectedEntity.y2 - selectedEntity.y1;
-                const currentDistance = Math.hypot(dx, dy);
-                if (!Number.isFinite(newDistance) || newDistance <= 0 || currentDistance < 1e-9) {
+                const angleModeSelect = document.getElementById('prop-angle-dimension-mode');
+                if (angleModeSelect) angleModeSelect.addEventListener('change', (e) => {
+                    saveState();
+                    setAngleDimensionMode(selectedEntity, e.target.value);
                     updatePropertiesPalette();
-                    showToast('Distance must be greater than zero.', 'error', 1800);
-                    return;
-                }
-                saveState();
-                selectedEntity.x2 = selectedEntity.x1 + dx / currentDistance * newDistance;
-                selectedEntity.y2 = selectedEntity.y1 + dy / currentDistance * newDistance;
-                updatePropertiesPalette();
-                render();
-                showToast('Dimension distance updated.', 'success', 1500);
-            });
+                    render();
+                    showToast('Angle dimension mode updated.', 'success', 1500);
+                });
 
-            const dimensionOffsetInput = document.getElementById('prop-dimension-offset');
-            if (dimensionOffsetInput) dimensionOffsetInput.addEventListener('change', (e) => {
-                const newOffset = parseStrictFloat(e.target.value, NaN);
-                const dx = selectedEntity.x2 - selectedEntity.x1;
-                const dy = selectedEntity.y2 - selectedEntity.y1;
-                const currentDistance = Math.hypot(dx, dy);
-                if (!Number.isFinite(newOffset) || currentDistance < 1e-9) {
+                const angleValueInput = document.getElementById('prop-angle-dimension-value');
+                if (angleValueInput) angleValueInput.addEventListener('change', (e) => {
+                    const value = parseStrictFloat(e.target.value, NaN);
+                    const updatedDimension = JSON.parse(JSON.stringify(selectedEntity));
+                    if (!setAngleDimensionValue(updatedDimension, value)) {
+                        updatePropertiesPalette();
+                        showToast('Enter an angle between 0 and the full circle for the selected mode.', 'error', 2200);
+                        return;
+                    }
+                    saveState();
+                    Object.assign(selectedEntity, updatedDimension);
                     updatePropertiesPalette();
-                    showToast('Position offset must be a number.', 'error', 1800);
-                    return;
-                }
-                saveState();
-                selectedEntity.offset = newOffset;
-                selectedEntity.textX = (selectedEntity.x1 + selectedEntity.x2) / 2 - dy / currentDistance * newOffset;
-                selectedEntity.textY = (selectedEntity.y1 + selectedEntity.y2) / 2 + dx / currentDistance * newOffset;
-                updatePropertiesPalette();
-                render();
-                showToast('Dimension position updated.', 'success', 1500);
-            });
+                    render();
+                    showToast('Angle dimension updated.', 'success', 1500);
+                });
 
-            bindInput('prop-dimension-text-x', value => {
-                selectedEntity.textX = value;
-                updatePropertiesPalette();
-            });
-            bindInput('prop-dimension-text-y', value => {
-                selectedEntity.textY = value;
-                updatePropertiesPalette();
-            });
+                const dimensionDecimalsSelect = document.getElementById('prop-dimension-decimals');
+                if (dimensionDecimalsSelect) dimensionDecimalsSelect.addEventListener('change', (e) => {
+                    saveState();
+                    selectedEntity.decimals = Number(e.target.value);
+                    updatePropertiesPalette();
+                    render();
+                    showToast('Dimension decimals updated.', 'success', 1500);
+                });
+            } else {
+                bindInput('prop-dimension-x1', value => { selectedEntity.x1 = value; updatePropertiesPalette(); });
+                bindInput('prop-dimension-y1', value => { selectedEntity.y1 = value; updatePropertiesPalette(); });
+                bindInput('prop-dimension-x2', value => { selectedEntity.x2 = value; updatePropertiesPalette(); });
+                bindInput('prop-dimension-y2', value => { selectedEntity.y2 = value; updatePropertiesPalette(); });
 
-            const dimensionDecimalsSelect = document.getElementById('prop-dimension-decimals');
-            if (dimensionDecimalsSelect) dimensionDecimalsSelect.addEventListener('change', (e) => {
-                saveState();
-                selectedEntity.decimals = Number(e.target.value);
-                updatePropertiesPalette();
-                render();
-                showToast('Dimension decimals updated.', 'success', 1500);
-            });
+                const dimensionDistanceInput = document.getElementById('prop-dimension-distance');
+                if (dimensionDistanceInput) dimensionDistanceInput.addEventListener('change', (e) => {
+                    const newDistance = parseStrictFloat(e.target.value, NaN);
+                    const dx = selectedEntity.x2 - selectedEntity.x1;
+                    const dy = selectedEntity.y2 - selectedEntity.y1;
+                    const currentDistance = Math.hypot(dx, dy);
+                    if (!Number.isFinite(newDistance) || newDistance <= 0 || currentDistance < 1e-9) {
+                        updatePropertiesPalette();
+                        showToast('Distance must be greater than zero.', 'error', 1800);
+                        return;
+                    }
+                    saveState();
+                    selectedEntity.x2 = selectedEntity.x1 + dx / currentDistance * newDistance;
+                    selectedEntity.y2 = selectedEntity.y1 + dy / currentDistance * newDistance;
+                    updatePropertiesPalette();
+                    render();
+                    showToast('Dimension distance updated.', 'success', 1500);
+                });
+
+                const dimensionOffsetInput = document.getElementById('prop-dimension-offset');
+                if (dimensionOffsetInput) dimensionOffsetInput.addEventListener('change', (e) => {
+                    const newOffset = parseStrictFloat(e.target.value, NaN);
+                    const dx = selectedEntity.x2 - selectedEntity.x1;
+                    const dy = selectedEntity.y2 - selectedEntity.y1;
+                    const currentDistance = Math.hypot(dx, dy);
+                    if (!Number.isFinite(newOffset) || currentDistance < 1e-9) {
+                        updatePropertiesPalette();
+                        showToast('Position offset must be a number.', 'error', 1800);
+                        return;
+                    }
+                    saveState();
+                    selectedEntity.offset = newOffset;
+                    selectedEntity.textX = (selectedEntity.x1 + selectedEntity.x2) / 2 - dy / currentDistance * newOffset;
+                    selectedEntity.textY = (selectedEntity.y1 + selectedEntity.y2) / 2 + dx / currentDistance * newOffset;
+                    updatePropertiesPalette();
+                    render();
+                    showToast('Dimension position updated.', 'success', 1500);
+                });
+
+                bindInput('prop-dimension-text-x', value => {
+                    selectedEntity.textX = value;
+                    updatePropertiesPalette();
+                });
+                bindInput('prop-dimension-text-y', value => {
+                    selectedEntity.textY = value;
+                    updatePropertiesPalette();
+                });
+
+                const dimensionDecimalsSelect = document.getElementById('prop-dimension-decimals');
+                if (dimensionDecimalsSelect) dimensionDecimalsSelect.addEventListener('change', (e) => {
+                    saveState();
+                    selectedEntity.decimals = Number(e.target.value);
+                    updatePropertiesPalette();
+                    render();
+                    showToast('Dimension decimals updated.', 'success', 1500);
+                });
+            }
         } else if (selectedEntity.type === 'line') {
             bindInput('prop-x1', v => { selectedEntity.x1 = v; updatePropertiesPalette(); });
             bindInput('prop-y1', v => { selectedEntity.y1 = v; updatePropertiesPalette(); });
@@ -4698,6 +5144,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 render();
                 showToast('Point name updated.', 'success', 1500);
             });
+            const pointShowTextSelect = document.getElementById('prop-point-show-text');
+            if (pointShowTextSelect) pointShowTextSelect.addEventListener('change', (e) => {
+                saveState();
+                selectedEntity.showText = e.target.value === 'true';
+                updatePropertiesPalette();
+                render();
+                showToast(`Point text ${selectedEntity.showText ? 'enabled' : 'disabled'}.`, 'success', 1500);
+            });
             bindInput('prop-px', v => selectedEntity.x = v);
             bindInput('prop-py', v => selectedEntity.y = v);
             bindInput('prop-pz', v => selectedEntity.z = v);
@@ -4768,10 +5222,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     sideSign
                 };
                 hatchCommand = null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 updatePropertiesPalette();
                 render();
                 showToast('Hatch created.', 'success', 1500);
+                return;
+            }
+            if (angleDimensionCommand) {
+                const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
+                if (!angleDimensionCommand.vertex) {
+                    angleDimensionCommand.vertex = commandPoint;
+                    statusMode.innerText = 'ANGLE DIMENSION: FIRST RAY';
+                    showToast('Select the first ray endpoint.', 'info', 2200);
+                    render();
+                    return;
+                }
+                if (!angleDimensionCommand.firstPoint) {
+                    angleDimensionCommand.firstPoint = commandPoint;
+                    statusMode.innerText = 'ANGLE DIMENSION: SECOND RAY';
+                    showToast('Select the second ray endpoint.', 'info', 2200);
+                    render();
+                    return;
+                }
+                if (!angleDimensionCommand.secondPoint) {
+                    angleDimensionCommand.secondPoint = commandPoint;
+                    statusMode.innerText = 'ANGLE DIMENSION: POSITION';
+                    showToast('Click where the angle value should appear.', 'info', 2200);
+                    render();
+                    return;
+                }
+                const dimension = createAngleDimension(
+                    angleDimensionCommand.vertex,
+                    angleDimensionCommand.firstPoint,
+                    angleDimensionCommand.secondPoint,
+                    mouseWorld
+                );
+                if (!dimension) {
+                    showToast('The angle rays must not be zero-length.', 'error', 1800);
+                    angleDimensionCommand = null;
+                    statusMode.innerText = 'MODE: SELECT';
+                    render();
+                    return;
+                }
+                saveState();
+                entities.push(dimension);
+                angleDimensionCommand = null;
+                selectedEntity = dimension;
+                selectedEntities = new Set([dimension]);
+                selectedSegmentIndex = null;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                updatePropertiesPalette();
+                render();
+                triggerAutoSave();
+                showToast('Angle dimension created.', 'success', 1500);
                 return;
             }
             if (dimensionCommand) {
@@ -4808,6 +5313,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 selectedEntity = dimension;
                 selectedEntities = new Set([dimension]);
                 selectedSegmentIndex = null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 updatePropertiesPalette();
                 render();
@@ -4831,11 +5337,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 selectedEntity = offsetEntity;
                 selectedEntities = new Set([offsetEntity]);
                 selectedSegmentIndex = offsetEntity.type === 'pline' ? 0 : null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 updatePropertiesPalette();
                 render();
                 triggerAutoSave();
                 showToast('Offset created.', 'success', 1500);
+                return;
+            }
+            if (trimCommand) {
+                const trimPoint = screenToWorld(mouseScreen.x, mouseScreen.y);
+                const trimmed = trimEntityAtPoint(trimCommand.source, trimPoint);
+                if (!trimmed) {
+                    trimCommand = null;
+                    setActiveToolbarButton('tool-select');
+                    statusMode.innerText = 'MODE: SELECT';
+                    render();
+                    showToast('Trim point not found on the selected object.', 'warning', 1800);
+                    return;
+                }
+                saveState();
+                const index = entities.indexOf(trimCommand.source);
+                if (index >= 0) {
+                    entities[index] = trimmed;
+                }
+                trimCommand = null;
+                selectedEntity = trimmed;
+                selectedEntities = new Set([trimmed]);
+                selectedSegmentIndex = trimmed.type === 'pline' ? 0 : null;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                updatePropertiesPalette();
+                render();
+                triggerAutoSave();
+                showToast('Object trimmed.', 'success', 1500);
                 return;
             }
             if (moveCommand) {
@@ -4859,6 +5394,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         Object.assign(item.entity, movedEntity);
                     });
                     moveCommand = null;
+                    setActiveToolbarButton('tool-select');
                     statusMode.innerText = 'MODE: SELECT';
                     updatePropertiesPalette();
                     render();
@@ -4932,6 +5468,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (selectedEntity && selectedEntities.has(hit.entity)) {
                         activeMove = {
                             startWorld: mouseWorld,
+                            startScreen: mouseScreen,
                             initialStates: new Map([...selectedEntities].map(entity => [
                                 entity,
                                 JSON.parse(JSON.stringify(entity))
@@ -4967,6 +5504,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     x: effectiveCoords.x,
                     y: effectiveCoords.y,
                     z: 0,
+                    showText: true,
                     color: document.getElementById('strokeColor').value,
                     width: parseInt(document.getElementById('lineWidth').value)
                 };
@@ -5103,6 +5641,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (activeMove) {
+            const dragDistance = Math.hypot(sx - activeMove.startScreen.x, sy - activeMove.startScreen.y);
+            if (dragDistance < MOVE_DRAG_THRESHOLD_PX) return;
             const currentWorld = screenToWorld(sx, sy);
             applyObjectMove(activeMove, currentWorld);
             if (activeMove.changed && !activeMove.saved) {
@@ -5245,7 +5785,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const mouseY = e.clientY - rect.top;
 
         const worldBefore = screenToWorld(mouseX, mouseY);
-        camera.zoom = Math.max(0.05, Math.min(camera.zoom * zoomFactor, 100));
+        camera.zoom = Math.max(0.05, Math.min(camera.zoom * zoomFactor, MAX_ZOOM));
         camera.x = mouseX - canvas.width / 2 - worldBefore.x * camera.zoom;
         camera.y = mouseY - canvas.height / 2 + worldBefore.y * camera.zoom;
 
@@ -5327,6 +5867,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         render();
     }
 
+    document.getElementById('btn-angle-dimension').addEventListener('click', startAngleDimensionCommand);
     document.getElementById('btn-copy-jpg').addEventListener('click', startImageCapture);
 
     // DXF Export Button Event (Full Payload with Units)
@@ -5386,9 +5927,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             startDimensionCommand();
             return;
         }
+        if ((e.key === 'a' || e.key === 'A') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startAngleDimensionCommand();
+            return;
+        }
         if ((e.key === 'o' || e.key === 'O') && !editingText && currentTool === 'select') {
             e.preventDefault();
             startOffsetCommand();
+            return;
+        }
+        if ((e.key === 't' || e.key === 'T') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startTrimCommand();
             return;
         }
         if ((e.key === 'm' || e.key === 'M') && !editingText && currentTool === 'select') {
@@ -5475,13 +6026,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if (hatchCommand) {
                 hatchCommand = null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 render();
                 showToast('Hatch cancelled.', 'info', 1200);
                 return;
             }
+            if (angleDimensionCommand) {
+                angleDimensionCommand = null;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Angle dimension cancelled.', 'info', 1200);
+                return;
+            }
             if (dimensionCommand) {
                 dimensionCommand = null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 render();
                 showToast('Dimension cancelled.', 'info', 1200);
@@ -5489,13 +6050,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if (offsetCommand) {
                 offsetCommand = null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 render();
                 showToast('Offset cancelled.', 'info', 1200);
                 return;
             }
+            if (trimCommand) {
+                trimCommand = null;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Trim cancelled.', 'info', 1200);
+                return;
+            }
             if (moveCommand) {
                 moveCommand = null;
+                setActiveToolbarButton('tool-select');
                 statusMode.innerText = 'MODE: SELECT';
                 render();
                 showToast('Move cancelled.', 'info', 1200);
@@ -5553,8 +6124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     document.querySelectorAll('.tool-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            setActiveToolbarButton(btn.id);
             currentTool = btn.dataset.tool;
             isDrawing = false;
             startPoint = null;
@@ -5571,6 +6141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     const pointImportModal = document.getElementById('point-import-modal');
     const pointImportInput = document.getElementById('point-import-input');
+    const pointImportHasLabels = document.getElementById('point-import-has-labels');
     const closePointImport = () => {
         pointImportModal.classList.remove('open');
         pointImportInput.value = '';
@@ -5591,15 +6162,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const invalidLines = [];
         const color = document.getElementById('strokeColor').value;
         const width = parseInt(document.getElementById('lineWidth').value);
+        const hasLabels = pointImportHasLabels.checked;
 
         lines.forEach((line, index) => {
             if (!line.trim()) return;
             const values = line.trim().split(/[,\t]+/).map(value => value.trim());
-            if (values.length !== 2 && values.length !== 3) {
+            const expectedLengths = hasLabels ? [3, 4] : [2, 3];
+            if (!expectedLengths.includes(values.length) || (hasLabels && !values[0])) {
                 invalidLines.push(index + 1);
                 return;
             }
-            const coordinates = values.map(value => parseStrictFloat(value, NaN));
+            const label = hasLabels ? values[0] : '';
+            const coordinates = values.slice(hasLabels ? 1 : 0).map(value => parseStrictFloat(value, NaN));
             if (coordinates.some(value => !Number.isFinite(value))) {
                 invalidLines.push(index + 1);
                 return;
@@ -5609,6 +6183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 x: coordinates[0],
                 y: coordinates[1],
                 z: coordinates[2] ?? 0,
+                name: label,
                 color,
                 width
             });
@@ -5632,7 +6207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     document.getElementById('btn-move').addEventListener('click', startMoveCommand);
     document.getElementById('btn-offset').addEventListener('click', startOffsetCommand);
-    document.getElementById('btn-dimension').addEventListener('click', startDimensionCommand);
+        document.getElementById('btn-trim').addEventListener('click', startTrimCommand);
     document.getElementById('btn-hatch').addEventListener('click', startHatchCommand);
 
     saveButton.addEventListener('click', () => {
@@ -5680,7 +6255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     localStorage.setItem('cad_angle_unit', res.data.angleUnit);
                 }
                 if (!entitiesOnly && Number.isFinite(Number(res.data.zoom))) {
-                    camera.zoom = Math.max(0.05, Math.min(Number(res.data.zoom), 100));
+                    camera.zoom = Math.max(0.05, Math.min(Number(res.data.zoom), MAX_ZOOM));
                     localStorage.setItem('cad_zoom', String(camera.zoom));
                     statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
                 }
