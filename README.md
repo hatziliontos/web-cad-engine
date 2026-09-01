@@ -1,81 +1,179 @@
+elevation property.
+to letters, numbers, hyphens, and underscores. The active filename is retained
+authentication or separate drawing per user.
+downloads a DXF with the same base name as the active JSON drawing (for
 # Web CAD Engine
 
-A small web-based 2D CAD editor implemented in a single PHP file. `cad.php`
-serves the HTML/CSS/JavaScript interface, stores the drawing as JSON, and
-generates an AutoCAD 2007-compatible DXF file.
+Μικρός 2D CAD editor για τον browser, υλοποιημένος σε ένα αρχείο PHP. Το
+[`cad.php`](cad.php) παρέχει το περιβάλλον HTML/CSS/JavaScript, το JSON API για
+αποθήκευση σχεδίων και εξαγωγή DXF συμβατού με AutoCAD 2007.
 
-## Running
+## Ελληνικά
 
-PHP with its built-in web server is required:
+### Εκκίνηση
+
+Απαιτείται PHP με δικαίωμα εγγραφής στον φάκελο του έργου:
 
 ```bash
 php -S localhost:8000
 ```
 
-Then open [http://localhost:8000/cad.php](http://localhost:8000/cad.php) in a
-modern browser. The web server must have permission to write to
-`cad_drawing.json`, because the drawing is stored there.
+Άνοιξε το [http://localhost:8000/cad.php](http://localhost:8000/cad.php) σε
+σύγχρονο browser. Ο server πρέπει να μπορεί να δημιουργεί και να ενημερώνει τα
+αρχεία JSON των σχεδίων.
 
-## What `cad.php` Does
+### Σχεδίαση και πλοήγηση
 
-### Drawing Environment
+- **Select**: επιλογή αντικειμένων, grips και επεξεργασία ιδιοτήτων.
+- **Line, Rectangle, Circle, Arc, Ellipse, Point**: δημιουργία βασικής
+  γεωμετρίας με clicks.
+- **Polyline (PL)**: πρόσθεσε κορυφές με διαδοχικά clicks. `Enter` ή δεξί click
+  ολοκληρώνει ανοικτή polyline και `C` την ολοκληρώνει ως κλειστή.
+- **Move, Offset, Dimension**: μετακίνηση, παράλληλο offset και διαστασιολόγηση
+  επιλεγμένων αντικειμένων.
+- **Generate 1 m Contours**: δημιουργεί ισοϋψείς ανά 1 m από σημεία με έγκυρα
+  X, Y και Z. Η επανάληψη αντικαθιστά μόνο τις προηγούμενες παραγόμενες ισοϋψείς.
 
-The following tools are supported:
+Μεσαίο click ή `Alt` για pan. Ο τροχός του ποντικιού κάνει zoom. Το **OSNAP**
+βρίσκει endpoints, midpoints, centers, quadrants, intersections, perpendicular,
+tangent και nearest σημεία. Ενεργοποίησε/απενεργοποίησε OSNAP με `F3` και Ortho
+με `F8`; το Grid Snap εφαρμόζει βήμα 10 μονάδων.
 
-- `Select`: select an entity and view or edit its properties.
-- `Line`: create a line with two clicks.
-- `Polyline (PL)`: create vertices with consecutive clicks. `Enter` or a right click finishes an open polyline, while `C` finishes a closed polyline.
-- `Rectangle`: create a rectangle with a corner click and a second click.
-- `Circle`: set the center with one click and the radius with a second click.
-- `Arc`: set the center, start point, and end point with three clicks.
-- `Ellipse`: set the center with one click and the two radii with a second click.
-- `Point`: create a point with one click.
-- `Generate 1 m Contours`: build contour polylines at 1 m elevation intervals
-  from the available points using their X, Y, and Z values. Re-running the
-  command replaces only the previously generated contour polylines.
+### Επιλογή και ιδιότητες
 
-Drawing uses clicks as the primary creation method rather than drag gestures.
-Pan the viewport with the middle mouse button or `Alt`, and zoom with the mouse
-wheel.
+Η παλέτα ιδιοτήτων επιτρέπει αλλαγές σε χρώμα, πάχος, συντεταγμένες και
+γεωμετρικά στοιχεία. Για polyline εμφανίζονται κορυφές, segments, μήκη, γωνίες,
+εμβαδόν και η ιδιότητα closed. Τα points έχουν όνομα και υψόμετρο και
+εμφανίζονται ως `name:elevation`.
 
-### Drawing Aids
+`Ctrl+Z` και `Ctrl+Y` εκτελούν Undo/Redo έως 50 βήματα. `Delete` ή `Backspace`
+διαγράφει την τρέχουσα επιλογή και το `Clear` αδειάζει το σχέδιο.
 
-- **OSNAP**: snaps to endpoints, midpoints, centers, quadrants, intersections,
-  perpendicular points, and nearby points on geometry. Toggle it with the
-  checkbox or `F3`.
-- **Grid Snap**: optional snapping to a 10-unit grid.
-- **Ortho**: constrains movement to horizontal or vertical directions with
-  `F8`.
-- Angle units can be set to `Degrees (360°)` or `Grads (400g)`. The selection is
-  stored in the browser's `localStorage` and in the drawing JSON.
+### Hatch
 
-## Selection and Editing
+Επίλεξε ένα line, polyline, rectangle, circle ή ellipse και πάτησε το κουμπί
+**Hatch** ή `H`. Δώσε offset distance και κάνε click στην επιθυμητή πλευρά.
+Από την παλέτα hatch μπορείς να αλλάξεις χρώμα, πάχος, offset distance, spacing,
+pattern angle και πλευρά.
 
-With `Select`, choose an entity and edit its color, line width, and geometric
-properties in the properties palette. Depending on the entity type, the palette
-also displays length, area, perimeter, radius, azimuth, vertices, and polyline
-angles. Grips support moving, stretching, and changing radii or ellipse axes.
+Στις polylines το hatch υπολογίζει μία κοινή mitered offset boundary. Κάθε
+segment σχεδιάζεται σε δική του λωρίδα, με pattern angle σχετική προς την
+κατεύθυνση του segment. Έτσι οι λωρίδες συναντώνται στις κορυφές χωρίς επικαλύψεις
+ή γραμμές που εξέρχονται από την αντίθετη πλευρά. Σε κλειστή polyline
+συμπεριλαμβάνεται και το segment κλεισίματος.
 
-Points have editable `Name`, `Position X`, `Position Y`, and `Elevation Z`
-properties. Each point is displayed on the canvas as `name:elevation`.
-Generated contour polylines use the interpolated elevation as their polyline
-elevation property.
+### Αντιγραφή JPG
 
-`Undo`/`Redo` and the `Ctrl+Z`/`Ctrl+Y` shortcuts retain up to 50 states.
-`Delete` or `Backspace` removes the selected entity, while `Clear` empties the
-entire drawing.
+Πάτησε το κουμπί **Copy selection as JPG** και σύρε με το ποντίκι ένα ορθογώνιο
+πάνω στον καμβά. Με την απελευθέρωση του ποντικιού η επιλεγμένη περιοχή
+αντιγράφεται ως JPEG στο clipboard. Το πλαίσιο επιλογής είναι διαφανές και δεν
+περιλαμβάνεται στην εικόνα. `Escape` ακυρώνει τη λήψη. Αν ο browser δεν δώσει
+άδεια clipboard, γίνεται λήψη του `cad-selection.jpg`.
 
-## Storage
+### Αποθήκευση και συνεργασία
 
-Every change triggers a delayed auto-save and sends a POST request to the same
-`cad.php` file. The drawing is written to [cad_drawing.json](cad_drawing.json)
-and loaded automatically when the page opens.
+Κάθε αλλαγή αποθηκεύεται αυτόματα με μικρή καθυστέρηση. Το **Save** αποθηκεύει
+άμεσα και το **Rename** δημιουργεί νέο όνομα σχεδίου. Επιτρέπονται γράμματα,
+αριθμοί, παύλες και underscores στα ονόματα. Το ενεργό όνομα παραμένει σε cookie.
 
-The file format is:
+Οι clients του ίδιου server μοιράζονται τα ίδια JSON drawings και βλέπουν τους
+ενεργούς χρήστες. Δεν υπάρχει authentication ή ιδιωτικό σχέδιο ανά χρήστη.
+
+### DXF export
+
+Το **Export to DXF (2007)** δημιουργεί αρχείο με το ίδιο βασικό όνομα με το
+ενεργό JSON drawing. Παράγεται AutoCAD 2007 `AC1021` DXF με metric/decimal
+ρυθμίσεις, `STANDARD` DimStyle, architectural tick block και συντεταγμένες με
+τέσσερα δεκαδικά ψηφία. Τα χρώματα HEX μετατρέπονται στο πλησιέστερο AutoCAD
+Color Index (ACI 1-9) και τα entities γράφονται στο layer `0`.
+
+| Αντικείμενο editor | DXF entity |
+| --- | --- |
+| Line | `LINE` |
+| Rectangle | closed `LWPOLYLINE` |
+| Polyline | `LWPOLYLINE` |
+| Circle | `CIRCLE` |
+| Arc | `ARC` |
+| Ellipse | `ELLIPSE` |
+| Point | `POINT` |
+
+## English
+
+### Getting started
+
+The application requires PHP and write permission in the project directory:
+
+```bash
+php -S localhost:8000
+```
+
+Open [http://localhost:8000/cad.php](http://localhost:8000/cad.php) in a modern
+browser. The server must be able to create and update the drawing JSON files.
+
+### Drawing and navigation
+
+- **Select** selects objects, exposes grips, and opens their properties.
+- **Line, Rectangle, Circle, Arc, Ellipse, Point** create basic geometry with
+  mouse clicks.
+- **Polyline (PL)** accepts consecutive vertices. `Enter` or right click ends an
+  open polyline; `C` ends it as a closed polyline.
+- **Move, Offset, Dimension** move selected objects, create offsets, and add
+  distance dimensions.
+- **Generate 1 m Contours** creates one-metre contours from points with valid X,
+  Y, and Z values. Re-running it replaces only previously generated contours.
+
+Use the middle mouse button or `Alt` to pan and the mouse wheel to zoom. OSNAP
+finds endpoints, midpoints, centers, quadrants, intersections, perpendicular,
+tangent, and nearest points. Toggle OSNAP with `F3`, Ortho with `F8`, and use
+Grid Snap for a ten-unit grid.
+
+### Editing and hatch
+
+The properties palette edits color, line width, coordinates, and type-specific
+geometry. Polyline properties include vertices, segments, lengths, angles, area,
+and closed state. Points also have editable names and elevations.
+
+Select a line, polyline, rectangle, circle, or ellipse, then use **Hatch** or
+`H`. Enter an offset distance and click the required side. Hatch color, line
+weight, offset distance, spacing, angle, and side are editable in the palette.
+
+Polyline hatch uses a shared mitered offset boundary. Each segment is clipped to
+its own strip and uses the hatch angle relative to that segment's direction. The
+strips meet cleanly at vertices without overlapping or extending through the
+opposite side; closed polylines include their closing segment.
+
+### Copy an area as JPG
+
+Click **Copy selection as JPG**, then drag a rectangle over the required canvas
+area. Releasing the pointer copies that crop as a JPEG image. The drag frame is
+transparent and is removed before the image is created. Press `Escape` to cancel.
+When clipboard image access is unavailable, the app downloads `cad-selection.jpg`
+instead.
+
+### Storage, collaboration, and export
+
+Edits are auto-saved after a short delay; **Save** writes immediately and
+**Rename** changes the drawing name. Drawing names support letters, digits,
+hyphens, and underscores. The active name is stored in a cookie.
+
+Clients using the same server share the JSON drawings and can see active users.
+There is no authentication or per-user private drawing. `Ctrl+Z`/`Ctrl+Y` retain
+up to 50 history states; `Delete`/`Backspace` remove a selection and `Clear`
+empties the drawing.
+
+**Export to DXF (2007)** creates an AutoCAD 2007 `AC1021` DXF with metric and
+decimal settings, a `STANDARD` DimStyle, architectural tick block, and four
+decimal-place coordinates. HEX colors are mapped to the nearest ACI 1-9 color;
+all entities are written to layer `0`.
+
+## Drawing format
+
+The default drawing is [cad_drawing.json](cad_drawing.json). Renamed drawings
+are separate JSON files in the application directory and can be selected through
+the Load control.
 
 ```json
 {
-  "angleUnit": "deg",
   "entities": [
     {
       "type": "point",
@@ -88,39 +186,11 @@ The file format is:
 }
 ```
 
-Storage is shared by all clients using the same server. There is no
-authentication or separate drawing per user.
-
-## DXF Export
-
-The `Export to DXF (2007)` button sends the current entities to PHP and
-downloads `drawing_2007.dxf`. The generator creates an `AC1021` header, metric
-and decimal settings, a `STANDARD` DimStyle, and an architectural tick block.
-Entity coordinates are written with four decimal places of precision.
-
-Entity mapping:
-
-| Editor entity | DXF entity |
-| --- | --- |
-| Line | `LINE` |
-| Rectangle | closed `LWPOLYLINE` |
-| Polyline | `LWPOLYLINE` |
-| Circle | `CIRCLE` |
-| Arc | `ARC` |
-| Ellipse | `ELLIPSE` |
-| Point | `POINT` |
-
-HEX colors from the editor are converted to the nearest basic AutoCAD Color
-Index (ACI 1-9). No separate DXF layer is stored per entity; exported entities
-are written to layer `0`.
-
 ## Files
 
 ```text
-cad.php           # PHP backend and complete frontend
-cad_drawing.json  # Local, shared storage for the current drawing
-README.md         # Documentation
+cad.php           PHP backend, DXF generator, and complete frontend
+cad_drawing.json  Default shared drawing storage
+cad_presence.json Active-user presence storage
+README.md         Bilingual project guide
 ```
-
-The interface combines Greek messages with English tool and property labels.
-There is no separate language switch.
