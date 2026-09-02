@@ -133,6 +133,29 @@ function getDXFGridBounds($entities) {
     return is_infinite($bounds['minX']) ? null : $bounds;
 }
 
+function getPaperFrameSpecFromKey($paperSizeKey) {
+    $paperSizeKey = strtoupper(trim((string)$paperSizeKey));
+    if (!preg_match('/^(A[0-4])-(P|L)$/', $paperSizeKey, $matches)) {
+        $paperSizeKey = 'A3-L';
+        preg_match('/^(A[0-4])-(P|L)$/', $paperSizeKey, $matches);
+    }
+    $sizes = [
+        'A4' => ['widthMm' => 210, 'heightMm' => 297],
+        'A3' => ['widthMm' => 297, 'heightMm' => 420],
+        'A2' => ['widthMm' => 420, 'heightMm' => 594],
+        'A1' => ['widthMm' => 594, 'heightMm' => 841],
+        'A0' => ['widthMm' => 841, 'heightMm' => 1189],
+    ];
+    $base = $matches[1] ?? 'A3';
+    $portrait = ($matches[2] ?? 'L') === 'P';
+    $size = $sizes[$base] ?? $sizes['A3'];
+    return [
+        'name' => $base . ' ' . ($portrait ? 'Portrait' : 'Landscape'),
+        'widthMm' => $portrait ? $size['widthMm'] : $size['heightMm'],
+        'heightMm' => $portrait ? $size['heightMm'] : $size['widthMm']
+    ];
+}
+
 function getDXFHatchBoundaryLoops($entity) {
     $hatch = $entity['hatch'] ?? null;
     if (!$hatch || !is_array($hatch)) return [];
@@ -215,9 +238,68 @@ function getDXFHatchBoundaryLoops($entity) {
 }
 
 // AutoCAD 2007 (AC1021) DXF generator.
-function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
+function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $paperSizeKey = 'A3-L', $paperFrameCenterX = null, $paperFrameCenterY = null) {
     $dxf = [];
     $nl = "\r\n";
+    $scale = max(1.0, (float)$printScale);
+    $pointTextHeight = 0.0025 * $scale;
+    $pointMarkerRadius = 0.0015 * $scale;
+    $pointTextOffset = $pointTextHeight * 0.9;
+    $paperSpec = getPaperFrameSpecFromKey($paperSizeKey);
+    $paperFrameWidth = ($paperSpec['widthMm'] / 1000) * $scale;
+    $paperFrameHeight = ($paperSpec['heightMm'] / 1000) * $scale;
+    $drawingBounds = getDXFGridBounds($entities);
+    if ($drawingBounds) {
+        $paperFrameCenterX = ((float)$drawingBounds['minX'] + (float)$drawingBounds['maxX']) / 2;
+        $paperFrameCenterY = ((float)$drawingBounds['minY'] + (float)$drawingBounds['maxY']) / 2;
+    } else {
+        $paperFrameCenterX = is_numeric($paperFrameCenterX) ? (float)$paperFrameCenterX : 0.0;
+        $paperFrameCenterY = is_numeric($paperFrameCenterY) ? (float)$paperFrameCenterY : 0.0;
+    }
+    $paperFrameLeft = $paperFrameCenterX - $paperFrameWidth / 2;
+    $paperFrameRight = $paperFrameCenterX + $paperFrameWidth / 2;
+    $paperFrameTop = $paperFrameCenterY + $paperFrameHeight / 2;
+    $paperFrameBottom = $paperFrameCenterY - $paperFrameHeight / 2;
+    $alignedDimensionDefs = [];
+    $encodeDxfText = function(string $text): string {
+        $text = str_replace(["\\", "\r", "\n"], ["\\\\", "", " "], $text);
+        if (function_exists('iconv')) {
+            $converted = iconv('UTF-8', 'Windows-1253//TRANSLIT//IGNORE', $text);
+            if ($converted !== false) return $converted;
+        }
+        if (function_exists('mb_convert_encoding')) {
+            $converted = mb_convert_encoding($text, 'Windows-1253', 'UTF-8');
+            if ($converted !== false) return $converted;
+        }
+        return $text;
+    };
+    $encodeDxfUnicodeText = function(string $text): string {
+        $text = str_replace(["\\", "\r", "\n"], ["\\\\", "", " "], $text);
+        $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
+        if ($chars === false) return $text;
+        $encoded = '';
+        foreach ($chars as $char) {
+            $code = null;
+            if (function_exists('mb_ord')) {
+                $code = mb_ord($char, 'UTF-8');
+            } elseif (function_exists('iconv')) {
+                $ucs4 = iconv('UTF-8', 'UCS-4BE', $char);
+                if ($ucs4 !== false && strlen($ucs4) === 4) {
+                    $code = unpack('N', $ucs4)[1];
+                }
+            }
+            if ($code === null) {
+                $bytes = unpack('C*', $char);
+                $code = $bytes && count($bytes) === 1 ? $bytes[1] : 63;
+            }
+            if ($code >= 32 && $code <= 126) {
+                $encoded .= $char;
+            } else {
+                $encoded .= sprintf('\\U+%04X', $code);
+            }
+        }
+        return $encoded;
+    };
 
     // Handles map
     $hRootDict    = "C";
@@ -232,6 +314,57 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $hArchTickBR  = "2A";
     $hNext        = 0x50;
 
+    if (is_array($entities)) {
+        $alignedDimIndex = 1;
+        foreach ($entities as $index => $ent) {
+            if (($ent['type'] ?? '') !== 'dimension' || ($ent['kind'] ?? 'distance') === 'angle') continue;
+            $dx = (float)($ent['x2'] ?? 0) - (float)($ent['x1'] ?? 0);
+            $dy = (float)($ent['y2'] ?? 0) - (float)($ent['y1'] ?? 0);
+            $length = hypot($dx, $dy);
+            if ($length < 1e-9) continue;
+
+            $offset = (float)($ent['offset'] ?? 0);
+            $nx = -$dy / $length;
+            $ny = $dx / $length;
+            $x1 = (float)$ent['x1'];
+            $y1 = (float)$ent['y1'];
+            $x2 = (float)$ent['x2'];
+            $y2 = (float)$ent['y2'];
+            $d1x = $x1 + $nx * $offset;
+            $d1y = $y1 + $ny * $offset;
+            $d2x = $x2 + $nx * $offset;
+            $d2y = $y2 + $ny * $offset;
+            $textX = is_numeric($ent['textX'] ?? null) ? (float)$ent['textX'] : ($d1x + $d2x) / 2;
+            $textY = is_numeric($ent['textY'] ?? null) ? (float)$ent['textY'] : ($d1y + $d2y) / 2;
+            $label = number_format($length, 2, '.', '');
+            $labelAngle = rad2deg(atan2(-$dy, $dx));
+            if ($labelAngle > 90 || $labelAngle < -90) $labelAngle += 180;
+            $circleRadius = max(0.08, $pointMarkerRadius * 0.7);
+            $textHeight = $pointTextHeight;
+            $textWidth = max(1.0, $textHeight * 20);
+
+            $alignedDimensionDefs[$index] = [
+                'blockName' => '*D' . $alignedDimIndex++,
+                'blockRecordHandle' => dechex($hNext++),
+                'blockHandle' => dechex($hNext++),
+                'blockEndHandle' => dechex($hNext++),
+                'ext1Handle' => dechex($hNext++),
+                'ext2Handle' => dechex($hNext++),
+                'dimLineHandle' => dechex($hNext++),
+                'circle1Handle' => dechex($hNext++),
+                'circle2Handle' => dechex($hNext++),
+                'textHandle' => dechex($hNext++),
+                'x1' => $x1, 'y1' => $y1, 'x2' => $x2, 'y2' => $y2,
+                'd1x' => $d1x, 'd1y' => $d1y, 'd2x' => $d2x, 'd2y' => $d2y,
+                'textX' => $textX, 'textY' => $textY,
+                'label' => $label, 'labelAngle' => $labelAngle,
+                'circleRadius' => $circleRadius,
+                'textHeight' => $textHeight,
+                'textWidth' => $textWidth
+            ];
+        }
+    }
+
     $aunits = $angleUnit === 'grad' ? 2 : ($angleUnit === 'rad' ? 3 : 0);
 
     // 1. HEADER SECTION (Correct System Variable Group Codes)
@@ -239,6 +372,8 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $dxf[] = "2{$nl}HEADER";
     $dxf[] = "9{$nl}\$ACADVER";
     $dxf[] = "1{$nl}AC1021"; // AutoCAD 2007
+    $dxf[] = "9{$nl}\$DWGCODEPAGE";
+    $dxf[] = "3{$nl}ANSI_1253";
     $dxf[] = "9{$nl}\$HANDSEED";
     $dxf[] = "5{$nl}FFFF";
     $dxf[] = "9{$nl}\$MEASUREMENT";
@@ -490,7 +625,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $dxf[] = "2{$nl}BLOCK_RECORD";
     $dxf[] = "5{$nl}22";
     $dxf[] = "100{$nl}AcDbSymbolTable";
-    $dxf[] = "70{$nl}3";
+    $dxf[] = "70{$nl}" . (3 + count($alignedDimensionDefs));
 
     $dxf[] = "0{$nl}BLOCK_RECORD";
     $dxf[] = "5{$nl}{$hModelBlockR}";
@@ -511,6 +646,14 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $dxf[] = "100{$nl}AcDbSymbolTableRecord";
     $dxf[] = "100{$nl}AcDbBlockTableRecord";
     $dxf[] = "2{$nl}_ARCHTICK";
+
+    foreach ($alignedDimensionDefs as $dimDef) {
+        $dxf[] = "0{$nl}BLOCK_RECORD";
+        $dxf[] = "5{$nl}{$dimDef['blockRecordHandle']}";
+        $dxf[] = "100{$nl}AcDbSymbolTableRecord";
+        $dxf[] = "100{$nl}AcDbBlockTableRecord";
+        $dxf[] = "2{$nl}{$dimDef['blockName']}";
+    }
 
     $dxf[] = "0{$nl}ENDTAB";
     $dxf[] = "0{$nl}ENDSEC";
@@ -595,6 +738,68 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $dxf[] = "8{$nl}0";
     $dxf[] = "100{$nl}AcDbBlockEnd";
 
+    foreach ($alignedDimensionDefs as $dimDef) {
+        $dxf[] = "0{$nl}BLOCK";
+        $dxf[] = "5{$nl}{$dimDef['blockHandle']}";
+        $dxf[] = "330{$nl}{$dimDef['blockRecordHandle']}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbBlockBegin";
+        $dxf[] = "2{$nl}{$dimDef['blockName']}";
+        $dxf[] = "70{$nl}1";
+        $dxf[] = "10{$nl}0.0000";
+        $dxf[] = "20{$nl}0.0000";
+        $dxf[] = "30{$nl}0.0000";
+        $dxf[] = "3{$nl}{$dimDef['blockName']}";
+        $dxf[] = "1{$nl}";
+
+        $dxf[] = "0{$nl}CIRCLE";
+        $dxf[] = "5{$nl}{$dimDef['circle1Handle']}";
+        $dxf[] = "330{$nl}{$dimDef['blockRecordHandle']}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbCircle";
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $dimDef['x1']);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $dimDef['y1']);
+        $dxf[] = "30{$nl}0.0000";
+        $dxf[] = "40{$nl}" . sprintf('%.4f', $dimDef['circleRadius']);
+
+        $dxf[] = "0{$nl}CIRCLE";
+        $dxf[] = "5{$nl}{$dimDef['circle2Handle']}";
+        $dxf[] = "330{$nl}{$dimDef['blockRecordHandle']}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbCircle";
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $dimDef['x2']);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $dimDef['y2']);
+        $dxf[] = "30{$nl}0.0000";
+        $dxf[] = "40{$nl}" . sprintf('%.4f', $dimDef['circleRadius']);
+
+        $dxf[] = "0{$nl}MTEXT";
+        $dxf[] = "5{$nl}{$dimDef['textHandle']}";
+        $dxf[] = "330{$nl}{$dimDef['blockRecordHandle']}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbMText";
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $dimDef['textX']);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $dimDef['textY']);
+        $dxf[] = "30{$nl}0.0000";
+        $dxf[] = "40{$nl}" . sprintf('%.4f', $dimDef['textHeight']);
+        $dxf[] = "41{$nl}" . sprintf('%.4f', $dimDef['textWidth']);
+        $dxf[] = "1{$nl}" . $encodeDxfUnicodeText($dimDef['label']);
+        $dxf[] = "7{$nl}STANDARD";
+        $dxf[] = "50{$nl}" . sprintf('%.1f', $dimDef['labelAngle']);
+        $dxf[] = "71{$nl}5";
+        $dxf[] = "72{$nl}5";
+
+        $dxf[] = "0{$nl}ENDBLK";
+        $dxf[] = "5{$nl}{$dimDef['blockEndHandle']}";
+        $dxf[] = "330{$nl}{$dimDef['blockRecordHandle']}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbBlockEnd";
+    }
+
     $dxf[] = "0{$nl}ENDSEC";
 
     // 5. ENTITIES SECTION
@@ -602,7 +807,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
     $dxf[] = "2{$nl}ENTITIES";
 
     if (is_array($entities)) {
-        foreach ($entities as $ent) {
+        foreach ($entities as $index => $ent) {
             $color = hexToACI($ent['color'] ?? '#ffffff');
             $type = $ent['type'] ?? '';
             $handle = dechex($hNext++);
@@ -727,16 +932,87 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
                 $dxf[] = "42{$nl}" . sprintf('%.6f', 2 * M_PI);
             }
             elseif ($type === 'point') {
-                $dxf[] = "0{$nl}POINT";
+                $pointX = (float)$ent['x'];
+                $pointY = (float)$ent['y'];
+                $pointZ = (float)($ent['z'] ?? 0);
+                $pointName = trim((string)($ent['name'] ?? ''));
+                $pointLabel = $pointName !== ''
+                    ? $pointName . ':' . sprintf('%.3f', $pointZ)
+                    : sprintf('%.3f', $pointZ);
+
+                $circleHandle = $handle;
+                $textHandle = dechex($hNext++);
+
+                $dxf[] = "0{$nl}CIRCLE";
+                $dxf[] = "5{$nl}{$circleHandle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
+                $dxf[] = "100{$nl}AcDbEntity";
+                $dxf[] = "8{$nl}0";
+                $dxf[] = "62{$nl}{$color}";
+                $dxf[] = "100{$nl}AcDbCircle";
+                $dxf[] = "10{$nl}" . sprintf('%.4f', $pointX);
+                $dxf[] = "20{$nl}" . sprintf('%.4f', $pointY);
+                $dxf[] = "30{$nl}" . sprintf('%.4f', $pointZ);
+                $dxf[] = "40{$nl}" . sprintf('%.4f', $pointMarkerRadius);
+
+                $dxf[] = "0{$nl}MTEXT";
+                $dxf[] = "5{$nl}{$textHandle}";
+                $dxf[] = "330{$nl}{$hModelBlockR}";
+                $dxf[] = "100{$nl}AcDbEntity";
+                $dxf[] = "8{$nl}0";
+                $dxf[] = "62{$nl}{$color}";
+                $dxf[] = "100{$nl}AcDbMText";
+                $dxf[] = "10{$nl}" . sprintf('%.4f', $pointX + $pointTextOffset);
+                $dxf[] = "20{$nl}" . sprintf('%.4f', $pointY + $pointTextOffset);
+                $dxf[] = "30{$nl}" . sprintf('%.4f', $pointZ);
+                $dxf[] = "40{$nl}" . sprintf('%.4f', $pointTextHeight);
+                $dxf[] = "41{$nl}" . sprintf('%.4f', max(1.0, $pointTextHeight * 20));
+                $dxf[] = "1{$nl}" . $encodeDxfUnicodeText($pointLabel);
+                $dxf[] = "7{$nl}STANDARD";
+                $dxf[] = "71{$nl}1";
+                $dxf[] = "72{$nl}5";
+            } elseif ($type === 'dimension' && ($ent['kind'] ?? 'distance') !== 'angle') {
+                $dimDef = $alignedDimensionDefs[$index] ?? null;
+                if (!$dimDef) continue;
+                $dx = (float)$ent['x2'] - (float)$ent['x1'];
+                $dy = (float)$ent['y2'] - (float)$ent['y1'];
+                $length = hypot($dx, $dy);
+                $textPointX = is_numeric($ent['textX'] ?? null)
+                    ? (float)$ent['textX']
+                    : ((float)$ent['x1'] + (float)$ent['x2']) / 2 - $dy / $length * (float)($ent['offset'] ?? 0);
+                $textPointY = is_numeric($ent['textY'] ?? null)
+                    ? (float)$ent['textY']
+                    : ((float)$ent['y1'] + (float)$ent['y2']) / 2 + $dx / $length * (float)($ent['offset'] ?? 0);
+                $dimLineMidX = ((float)$ent['x1'] + (float)$ent['x2']) / 2 + (-$dy / $length) * (float)($ent['offset'] ?? 0);
+                $dimLineMidY = ((float)$ent['y1'] + (float)$ent['y2']) / 2 + ($dx / $length) * (float)($ent['offset'] ?? 0);
+                $label = number_format($length, 2, '.', '');
+                $dxf[] = "0{$nl}DIMENSION";
                 $dxf[] = "5{$nl}{$handle}";
                 $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
-                $dxf[] = "100{$nl}AcDbPoint";
-                $dxf[] = "10{$nl}" . sprintf('%.4f', (float)$ent['x']);
-                $dxf[] = "20{$nl}" . sprintf('%.4f', (float)$ent['y']);
-                $dxf[] = "30{$nl}" . sprintf('%.4f', (float)($ent['z'] ?? 0));
+                $dxf[] = "100{$nl}AcDbDimension";
+                $dxf[] = "2{$nl}{$dimDef['blockName']}";
+                $dxf[] = "10{$nl}" . sprintf('%.4f', $dimLineMidX);
+                $dxf[] = "20{$nl}" . sprintf('%.4f', $dimLineMidY);
+                $dxf[] = "30{$nl}0.0000";
+                $dxf[] = "11{$nl}" . sprintf('%.4f', $textPointX);
+                $dxf[] = "21{$nl}" . sprintf('%.4f', $textPointY);
+                $dxf[] = "31{$nl}0.0000";
+                $dxf[] = "70{$nl}161";
+                $dxf[] = "71{$nl}5";
+                $dxf[] = "72{$nl}1";
+                $dxf[] = "1{$nl}";
+                $dxf[] = "3{$nl}STANDARD";
+                $dxf[] = "100{$nl}AcDbAlignedDimension";
+                $dxf[] = "13{$nl}" . sprintf('%.4f', (float)$ent['x1']);
+                $dxf[] = "23{$nl}" . sprintf('%.4f', (float)$ent['y1']);
+                $dxf[] = "33{$nl}0.0000";
+                $dxf[] = "14{$nl}" . sprintf('%.4f', (float)$ent['x2']);
+                $dxf[] = "24{$nl}" . sprintf('%.4f', (float)$ent['y2']);
+                $dxf[] = "34{$nl}0.0000";
+                $dxf[] = "50{$nl}0.0000";
             }
 
             $hatchLoops = getDXFHatchBoundaryLoops($ent);
@@ -793,85 +1069,248 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100) {
 
     $gridBounds = getDXFGridBounds($entities);
     if ($gridBounds) {
-        $gridStep = 50.0;
-        $gridMinX = floor($gridBounds['minX'] / $gridStep) * $gridStep;
-        $gridMaxX = ceil($gridBounds['maxX'] / $gridStep) * $gridStep;
-        $gridMinY = floor($gridBounds['minY'] / $gridStep) * $gridStep;
-        $gridMaxY = ceil($gridBounds['maxY'] / $gridStep) * $gridStep;
-        $gridHandle = $hNext++;
-        $gridColor = 8;
         $labelHeight = 0.0025 * max(1, (float)$printScale);
-        $labelOffset = $labelHeight * 1.5;
+        $coordStep = 20.0;
+        $drawingWidth = max(0.0, (float)$gridBounds['maxX'] - (float)$gridBounds['minX']);
+        $drawingHeight = max(0.0, (float)$gridBounds['maxY'] - (float)$gridBounds['minY']);
+        $gapX = max(0.0, $paperFrameWidth - $drawingWidth);
+        $gapY = max(0.0, $paperFrameHeight - $drawingHeight);
+        $coordInsetX = $gapX / 4.0;
+        $coordInsetY = $gapY / 4.0;
+        $coordLeft = (float)$gridBounds['minX'] - $coordInsetX;
+        $coordRight = (float)$gridBounds['maxX'] + $coordInsetX;
+        $coordBottom = (float)$gridBounds['minY'] - $coordInsetY;
+        $coordTop = (float)$gridBounds['maxY'] + $coordInsetY;
+        if ($coordLeft > $coordRight) { $coordLeft = $coordRight = (float)$gridBounds['minX']; }
+        if ($coordBottom > $coordTop) { $coordBottom = $coordTop = (float)$gridBounds['minY']; }
+        $labelOffset = max(0.6, $labelHeight * 0.9);
+        $coordHandle = $hNext++;
 
-        for ($x = $gridMinX; $x <= $gridMaxX; $x += $gridStep) {
-            $dxf[] = "0{$nl}LINE";
-            $dxf[] = "5{$nl}" . dechex($gridHandle++);
+        $dxf[] = "0{$nl}LWPOLYLINE";
+        $dxf[] = "5{$nl}" . dechex($coordHandle++);
+        $dxf[] = "330{$nl}{$hModelBlockR}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "62{$nl}8";
+        $dxf[] = "100{$nl}AcDbPolyline";
+        $dxf[] = "90{$nl}4";
+        $dxf[] = "70{$nl}1";
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $coordLeft);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $coordBottom);
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $coordRight);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $coordBottom);
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $coordRight);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $coordTop);
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $coordLeft);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $coordTop);
+
+        $addText = static function (array &$dxf, string $nl, int &$coordHandle, float $x, float $y, float $height, string $label, float $rotation = 0.0, int $hAlign = 0) use ($hModelBlockR, $encodeDxfText): void {
+            $dxf[] = "0{$nl}TEXT";
+            $dxf[] = "5{$nl}" . dechex($coordHandle++);
             $dxf[] = "330{$nl}{$hModelBlockR}";
             $dxf[] = "100{$nl}AcDbEntity";
             $dxf[] = "8{$nl}0";
-            $dxf[] = "62{$nl}{$gridColor}";
-            $dxf[] = "100{$nl}AcDbLine";
+            $dxf[] = "100{$nl}AcDbText";
             $dxf[] = "10{$nl}" . sprintf('%.4f', $x);
-            $dxf[] = "20{$nl}" . sprintf('%.4f', $gridMinY);
-            $dxf[] = "30{$nl}0.0000";
-            $dxf[] = "11{$nl}" . sprintf('%.4f', $x);
-            $dxf[] = "21{$nl}" . sprintf('%.4f', $gridMaxY);
-            $dxf[] = "31{$nl}0.0000";
-        }
-
-        for ($y = $gridMinY; $y <= $gridMaxY; $y += $gridStep) {
-            $dxf[] = "0{$nl}LINE";
-            $dxf[] = "5{$nl}" . dechex($gridHandle++);
-            $dxf[] = "330{$nl}{$hModelBlockR}";
-            $dxf[] = "100{$nl}AcDbEntity";
-            $dxf[] = "8{$nl}0";
-            $dxf[] = "62{$nl}{$gridColor}";
-            $dxf[] = "100{$nl}AcDbLine";
-            $dxf[] = "10{$nl}" . sprintf('%.4f', $gridMinX);
             $dxf[] = "20{$nl}" . sprintf('%.4f', $y);
             $dxf[] = "30{$nl}0.0000";
-            $dxf[] = "11{$nl}" . sprintf('%.4f', $gridMaxX);
-            $dxf[] = "21{$nl}" . sprintf('%.4f', $y);
+            $dxf[] = "40{$nl}" . sprintf('%.4f', $height);
+            $dxf[] = "1{$nl}" . $encodeDxfText($label);
+            $dxf[] = "50{$nl}" . sprintf('%.1f', $rotation);
+            $dxf[] = "7{$nl}STANDARD";
+            if ($hAlign !== 0) {
+                $dxf[] = "72{$nl}{$hAlign}";
+                $dxf[] = "11{$nl}" . sprintf('%.4f', $x);
+                $dxf[] = "21{$nl}" . sprintf('%.4f', $y);
+                $dxf[] = "31{$nl}0.0000";
+            }
+            $dxf[] = "100{$nl}AcDbText";
+        };
+
+        $addLine = static function (array &$dxf, string $nl, int &$coordHandle, float $x1, float $y1, float $x2, float $y2) use ($hModelBlockR): void {
+            $dxf[] = "0{$nl}LINE";
+            $dxf[] = "5{$nl}" . dechex($coordHandle++);
+            $dxf[] = "330{$nl}{$hModelBlockR}";
+            $dxf[] = "100{$nl}AcDbEntity";
+            $dxf[] = "8{$nl}0";
+            $dxf[] = "100{$nl}AcDbLine";
+            $dxf[] = "10{$nl}" . sprintf('%.4f', $x1);
+            $dxf[] = "20{$nl}" . sprintf('%.4f', $y1);
+            $dxf[] = "30{$nl}0.0000";
+            $dxf[] = "11{$nl}" . sprintf('%.4f', $x2);
+            $dxf[] = "21{$nl}" . sprintf('%.4f', $y2);
             $dxf[] = "31{$nl}0.0000";
-        }
+        };
 
-        foreach (range($gridMinX, $gridMaxX, $gridStep) as $x) {
-            $label = (string)(int)round($x);
-            $labelWidth = max(1, strlen($label)) * $labelHeight * 0.6;
-            $dxf[] = "0{$nl}TEXT";
-            $dxf[] = "5{$nl}" . dechex($gridHandle++);
+        $addMText = static function (array &$dxf, string $nl, int &$coordHandle, float $x, float $y, float $height, float $width, string $label, float $rotation = 0.0, int $attachment = 1) use ($hModelBlockR, $encodeDxfUnicodeText): void {
+            $dxf[] = "0{$nl}MTEXT";
+            $dxf[] = "5{$nl}" . dechex($coordHandle++);
             $dxf[] = "330{$nl}{$hModelBlockR}";
             $dxf[] = "100{$nl}AcDbEntity";
             $dxf[] = "8{$nl}0";
-            $dxf[] = "100{$nl}AcDbText";
-            $dxf[] = "10{$nl}" . sprintf('%.4f', $x + ($labelHeight / 2));
-            $dxf[] = "20{$nl}" . sprintf('%.4f', $gridMinY - $labelOffset - ($labelWidth / 2));
+            $dxf[] = "100{$nl}AcDbMText";
+            $dxf[] = "10{$nl}" . sprintf('%.4f', $x);
+            $dxf[] = "20{$nl}" . sprintf('%.4f', $y);
             $dxf[] = "30{$nl}0.0000";
-            $dxf[] = "40{$nl}" . sprintf('%.4f', $labelHeight);
-            $dxf[] = "1{$nl}{$label}";
-            $dxf[] = "50{$nl}90.0";
+            $dxf[] = "40{$nl}" . sprintf('%.4f', $height);
+            $dxf[] = "41{$nl}" . sprintf('%.4f', $width);
+            $dxf[] = "1{$nl}" . $encodeDxfUnicodeText($label);
             $dxf[] = "7{$nl}STANDARD";
-            $dxf[] = "100{$nl}AcDbText";
+            $dxf[] = "50{$nl}" . sprintf('%.1f', $rotation);
+            $dxf[] = "71{$nl}{$attachment}";
+            $dxf[] = "72{$nl}5";
+        };
+
+        $formatActual = static fn(float $value): string => number_format($value, 2, '.', '');
+
+        $xLabels = [$coordLeft];
+        $xStart = ceil(($coordLeft + 1e-9) / $coordStep) * $coordStep;
+        for ($x = $xStart; $x < $coordRight - 1e-9; $x += $coordStep) {
+            if ($x > $coordLeft + 1e-9 && $x < $coordRight - 1e-9) $xLabels[] = $x;
+        }
+        $xLabels[] = $coordRight;
+        $xLabels = array_values(array_unique(array_map(static fn($v) => round($v, 6), $xLabels)));
+
+        $yLabels = [$coordBottom];
+        $yStart = ceil(($coordBottom + 1e-9) / $coordStep) * $coordStep;
+        for ($y = $yStart; $y < $coordTop - 1e-9; $y += $coordStep) {
+            if ($y > $coordBottom + 1e-9 && $y < $coordTop - 1e-9) $yLabels[] = $y;
+        }
+        $yLabels[] = $coordTop;
+        $yLabels = array_values(array_unique(array_map(static fn($v) => round($v, 6), $yLabels)));
+
+        foreach ($xLabels as $x) {
+            $isEdge = abs($x - $coordLeft) < 1e-6 || abs($x - $coordRight) < 1e-6;
+            if ($isEdge) continue;
+            $label = (string)((int)round($x));
+            $addLine($dxf, $nl, $coordHandle, (float)$x, $coordBottom, (float)$x, $coordBottom + $labelOffset);
+            $addMText($dxf, $nl, $coordHandle, (float)$x, $coordBottom + ($labelOffset * 0.5) + 0.3, $labelHeight, max(1.0, $labelHeight * 20), $label, 90.0, 4);
+            $addLine($dxf, $nl, $coordHandle, (float)$x, $coordTop, (float)$x, $coordTop - $labelOffset);
         }
 
-        foreach (range($gridMinY, $gridMaxY, $gridStep) as $y) {
-            $label = (string)(int)round($y);
-            $labelWidth = max(1, strlen($label)) * $labelHeight * 0.6;
-            $dxf[] = "0{$nl}TEXT";
-            $dxf[] = "5{$nl}" . dechex($gridHandle++);
-            $dxf[] = "330{$nl}{$hModelBlockR}";
-            $dxf[] = "100{$nl}AcDbEntity";
-            $dxf[] = "8{$nl}0";
-            $dxf[] = "100{$nl}AcDbText";
-            $dxf[] = "10{$nl}" . sprintf('%.4f', $gridMinX - $labelOffset - $labelWidth);
-            $dxf[] = "20{$nl}" . sprintf('%.4f', $y - ($labelHeight / 2));
-            $dxf[] = "30{$nl}0.0000";
-            $dxf[] = "40{$nl}" . sprintf('%.4f', $labelHeight);
-            $dxf[] = "1{$nl}{$label}";
-            $dxf[] = "7{$nl}STANDARD";
-            $dxf[] = "100{$nl}AcDbText";
+        foreach ($yLabels as $y) {
+            $isEdge = abs($y - $coordBottom) < 1e-6 || abs($y - $coordTop) < 1e-6;
+            if ($isEdge) continue;
+            $label = (string)((int)round($y));
+            $yTickLen = 0.6;
+            $addLine($dxf, $nl, $coordHandle, $coordLeft, (float)$y, $coordLeft + $yTickLen, (float)$y);
+            $addMText($dxf, $nl, $coordHandle, $coordLeft + $yTickLen, (float)$y, $labelHeight, max(1.0, $labelHeight * 20), $label, 0.0, 4);
+            $addLine($dxf, $nl, $coordHandle, $coordRight, (float)$y, $coordRight - $yTickLen, (float)$y);
         }
+
+        $crossSize = 0.6;
+        $crossHalf = $crossSize * 0.5;
+        foreach ($xLabels as $x) {
+            if (abs($x - $coordLeft) < 1e-6 || abs($x - $coordRight) < 1e-6) continue;
+            foreach ($yLabels as $y) {
+                if (abs($y - $coordBottom) < 1e-6 || abs($y - $coordTop) < 1e-6) continue;
+                $addLine($dxf, $nl, $coordHandle, (float)$x - $crossHalf, (float)$y, (float)$x + $crossHalf, (float)$y);
+                $addLine($dxf, $nl, $coordHandle, (float)$x, (float)$y - $crossHalf, (float)$x, (float)$y + $crossHalf);
+            }
+        }
+
+        $hNext = max($hNext, $coordHandle);
     }
+
+    $frameHandle = dechex($hNext++);
+    $dxf[] = "0{$nl}LWPOLYLINE";
+    $dxf[] = "5{$nl}{$frameHandle}";
+    $dxf[] = "330{$nl}{$hModelBlockR}";
+    $dxf[] = "100{$nl}AcDbEntity";
+    $dxf[] = "8{$nl}0";
+    $dxf[] = "62{$nl}8";
+    $dxf[] = "100{$nl}AcDbPolyline";
+    $dxf[] = "90{$nl}4";
+    $dxf[] = "70{$nl}1";
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $paperFrameLeft);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $paperFrameBottom);
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $paperFrameRight);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $paperFrameBottom);
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $paperFrameRight);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $paperFrameTop);
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $paperFrameLeft);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $paperFrameTop);
+
+    $northRadius = max(1.0, min($paperFrameWidth, $paperFrameHeight) * 0.03);
+    $northCx = $paperFrameLeft + $northRadius * 2.2;
+    $northCy = $paperFrameTop - $northRadius * 2.2;
+    $northTipY = $northCy + $northRadius * 1.7;
+    $northLabelY = $northCy + $northRadius * 0.15;
+
+    $northCircleHandle = dechex($hNext++);
+    $dxf[] = "0{$nl}CIRCLE";
+    $dxf[] = "5{$nl}{$northCircleHandle}";
+    $dxf[] = "330{$nl}{$hModelBlockR}";
+    $dxf[] = "100{$nl}AcDbEntity";
+    $dxf[] = "8{$nl}0";
+    $dxf[] = "62{$nl}8";
+    $dxf[] = "100{$nl}AcDbCircle";
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $northCx);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $northCy);
+    $dxf[] = "30{$nl}0.0000";
+    $dxf[] = "40{$nl}" . sprintf('%.4f', $northRadius);
+
+    $northLineHandle = dechex($hNext++);
+    $dxf[] = "0{$nl}LINE";
+    $dxf[] = "5{$nl}{$northLineHandle}";
+    $dxf[] = "330{$nl}{$hModelBlockR}";
+    $dxf[] = "100{$nl}AcDbEntity";
+    $dxf[] = "8{$nl}0";
+    $dxf[] = "62{$nl}8";
+    $dxf[] = "100{$nl}AcDbLine";
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $northCx);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $northCy - $northRadius * 0.2);
+    $dxf[] = "30{$nl}0.0000";
+    $dxf[] = "11{$nl}" . sprintf('%.4f', $northCx);
+    $dxf[] = "21{$nl}" . sprintf('%.4f', $northTipY);
+    $dxf[] = "31{$nl}0.0000";
+
+    $northHeadLeft = dechex($hNext++);
+    $dxf[] = "0{$nl}LINE";
+    $dxf[] = "5{$nl}{$northHeadLeft}";
+    $dxf[] = "330{$nl}{$hModelBlockR}";
+    $dxf[] = "100{$nl}AcDbEntity";
+    $dxf[] = "8{$nl}0";
+    $dxf[] = "62{$nl}8";
+    $dxf[] = "100{$nl}AcDbLine";
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $northCx);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $northTipY);
+    $dxf[] = "30{$nl}0.0000";
+    $dxf[] = "11{$nl}" . sprintf('%.4f', $northCx - $northRadius * 0.45);
+    $dxf[] = "21{$nl}" . sprintf('%.4f', $northTipY - $northRadius * 0.45);
+    $dxf[] = "31{$nl}0.0000";
+
+    $northHeadRight = dechex($hNext++);
+    $dxf[] = "0{$nl}LINE";
+    $dxf[] = "5{$nl}{$northHeadRight}";
+    $dxf[] = "330{$nl}{$hModelBlockR}";
+    $dxf[] = "100{$nl}AcDbEntity";
+    $dxf[] = "8{$nl}0";
+    $dxf[] = "62{$nl}8";
+    $dxf[] = "100{$nl}AcDbLine";
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $northCx);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $northTipY);
+    $dxf[] = "30{$nl}0.0000";
+    $dxf[] = "11{$nl}" . sprintf('%.4f', $northCx + $northRadius * 0.45);
+    $dxf[] = "21{$nl}" . sprintf('%.4f', $northTipY - $northRadius * 0.45);
+    $dxf[] = "31{$nl}0.0000";
+
+    $northTextHandle = dechex($hNext++);
+    $dxf[] = "0{$nl}TEXT";
+    $dxf[] = "5{$nl}{$northTextHandle}";
+    $dxf[] = "330{$nl}{$hModelBlockR}";
+    $dxf[] = "100{$nl}AcDbEntity";
+    $dxf[] = "8{$nl}0";
+    $dxf[] = "62{$nl}8";
+    $dxf[] = "100{$nl}AcDbText";
+    $dxf[] = "10{$nl}" . sprintf('%.4f', $northCx);
+    $dxf[] = "20{$nl}" . sprintf('%.4f', $northLabelY);
+    $dxf[] = "30{$nl}0.0000";
+    $dxf[] = "40{$nl}" . sprintf('%.4f', max(0.5, $northRadius * 0.8));
+    $dxf[] = "1{$nl}B";
+    $dxf[] = "7{$nl}STANDARD";
+    $dxf[] = "50{$nl}0.0";
+    $dxf[] = "100{$nl}AcDbText";
 
     $dxf[] = "0{$nl}ENDSEC";
 
@@ -1194,16 +1633,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $entities = [];
         $angleUnit = 'deg';
         $printScale = max(1, (float)($_POST['printScale'] ?? 100));
+        $paperSizeKey = 'A3-L';
+        $paperFrameCenterX = null;
+        $paperFrameCenterY = null;
         if (is_array($parsed)) {
             if (isset($parsed['entities']) && is_array($parsed['entities'])) {
                 $entities = $parsed['entities'];
                 $angleUnit = $parsed['angleUnit'] ?? 'deg';
+                $paperSizeKey = $parsed['paperSize'] ?? $paperSizeKey;
+                $paperFrameCenterX = $parsed['paperFrameCenterX'] ?? null;
+                $paperFrameCenterY = $parsed['paperFrameCenterY'] ?? null;
             } elseif (isset($parsed[0]) && is_array($parsed[0])) {
                 $entities = $parsed;
             }
         }
 
-        $dxfContent = generateDXF2007($entities, $angleUnit, $printScale);
+        $dxfContent = generateDXF2007($entities, $angleUnit, $printScale, $paperSizeKey, $paperFrameCenterX, $paperFrameCenterY);
 
         header('Content-Type: application/dxf');
         header('Content-Disposition: attachment; filename="' . basename($dataFile, '.json') . '.dxf"');
@@ -1477,6 +1922,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border: 1px solid #555;
             font: 12px Consolas, monospace;
         }
+        .contour-option { display: block; margin: 8px 0; }
+        .contour-settings { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+        #contour-interval { width: 90px; }
+        #point-import-fields[hidden] { display: none; }
         .point-import-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
         @media (max-width: 760px) {
             #toolbar { align-items: stretch; padding: 0 8px; gap: 4px; height: auto; flex-basis: auto; overflow: visible; }
@@ -1501,12 +1950,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="tool-arc" class="tool-btn icon-btn" data-tool="arc" title="Arc"><svg viewBox="0 0 24 24"><path d="M4 17a9 9 0 0 1 13-10"/></svg><span class="sr-only">Arc</span></button>
         <button id="tool-ellipse" class="tool-btn icon-btn" data-tool="ellipse" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="5"/></svg><span class="sr-only">Ellipse</span></button>
         <button id="tool-point" class="tool-btn icon-btn" data-tool="point" title="Point"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg><span class="sr-only">Point</span></button>
-        <button id="btn-import-points" class="icon-btn" title="Import Points"><svg viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M4 7V4h5M20 7V4h-5"/></svg><span class="sr-only">Import Points</span></button>
-        <button id="btn-generate-contours" class="icon-btn" title="Generate 1 m Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate 1 m Contours</span></button>
+        <button id="btn-generate-contours" class="icon-btn" title="Generate Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate Contours</span></button>
         <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
         <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H4z"/><path d="M8 16V8h8v8H8z"/></svg><span class="sr-only">Offset</span></button>
         <button id="btn-trim" class="icon-btn" title="Trim selected object (T)"><svg viewBox="0 0 24 24"><path d="M5 17L17 5"/><path d="M8 9l2 2M14 15l3 3"/><path d="M4 12h4M16 12h4"/><circle cx="17" cy="5" r="2"/><circle cx="5" cy="17" r="2"/></svg><span class="sr-only">Trim</span></button>
-        <button id="btn-dimension" class="icon-btn" title="Distance dimension (D)"><svg viewBox="0 0 24 24"><path d="M6 17L18 9M6 17l4-1M6 17l2-3M18 9l-4 1M18 9l-2 3"/><path d="M4 20l3-5M17 9l3-5"/></svg><span class="sr-only">Distance dimension</span></button>
+        <button id="btn-dimension" class="icon-btn" title="Aligned dimension (D)"><svg viewBox="0 0 24 24"><path d="M6 17L18 9M6 17l4-1M6 17l2-3M18 9l-4 1M18 9l-2 3"/><path d="M4 20l3-5M17 9l3-5"/></svg><span class="sr-only">Aligned dimension</span></button>
         <button id="btn-angle-dimension" class="icon-btn" title="Angle dimension (A)"><svg viewBox="0 0 24 24"><path d="M6 16a8 8 0 0 1 8-8"/><path d="M6 16l8-8"/><path d="M8 18h10v-2H8z"/><circle cx="6" cy="16" r="1.5"/><circle cx="14" cy="8" r="1.5"/></svg><span class="sr-only">Angle dimension</span></button>
         <button id="btn-copy-jpg" class="icon-btn" title="Copy selection as JPG"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="9" cy="9" r="1.5"/><path d="M4 16l4-4 3 3 2-2 7 6"/></svg><span class="sr-only">Copy selection as JPG</span></button>
         <button id="btn-hatch" class="icon-btn" title="Hatch with offset (H)"><svg viewBox="0 0 24 24"><path d="M4 18L18 4M8 20L20 8M4 12L12 4"/><path d="M4 20h16V4H4z"/></svg><span class="sr-only">Hatch with offset</span></button>
@@ -1517,6 +1965,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <option value="deg">Degrees (°)</option>
             <option value="grad">Grads (g)</option>
             <option value="rad">Radians (rad)</option>
+        </select>
+        <select id="paperSize" title="Paper size for the on-canvas frame">
+            <option value="A4-P">A4 P</option>
+            <option value="A4-L">A4 L</option>
+            <option value="A3-P">A3 P</option>
+            <option value="A3-L" selected>A3 L</option>
+            <option value="A2-P">A2 P</option>
+            <option value="A2-L">A2 L</option>
+            <option value="A1-P">A1 P</option>
+            <option value="A1-L">A1 L</option>
+            <option value="A0-P">A0 P</option>
+            <option value="A0-L">A0 L</option>
         </select>
         <select id="printScale" title="DXF print scale for text height">
             <option value="50">Scale 1:50</option>
@@ -1588,12 +2048,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <div id="point-import-modal" role="dialog" aria-modal="true" aria-labelledby="point-import-title">
     <div class="point-import-panel">
-        <h3 id="point-import-title">Import Points</h3>
-        <textarea id="point-import-input" placeholder="One point per line: X,Y or X,Y,Z&#10;With point labels: P,X,Y or P,X,Y,Z&#10;Commas and tabs are accepted"></textarea>
-        <label><input type="checkbox" id="point-import-has-labels"> Point labels</label>
+        <h3 id="point-import-title">Generate Contours</h3>
+        <label class="contour-option"><input type="radio" name="contour-point-source" value="existing" checked> Use existing points</label>
+        <label class="contour-option"><input type="radio" name="contour-point-source" value="new"> Import new points</label>
+        <div class="contour-settings">
+            <label for="contour-interval">Contour interval (m)</label>
+            <input type="number" id="contour-interval" min="0.001" step="any" value="1" required>
+        </div>
+        <div id="point-import-fields" hidden>
+            <textarea id="point-import-input" placeholder="One point per line: X,Y or X,Y,Z&#10;With point labels: P,X,Y or P,X,Y,Z&#10;Commas and tabs are accepted"></textarea>
+            <label><input type="checkbox" id="point-import-has-labels"> Point labels</label>
+        </div>
         <div class="point-import-actions">
             <button id="btn-cancel-point-import">Cancel</button>
-            <button id="btn-apply-point-import" class="active">Add Points</button>
+            <button id="btn-apply-point-import" class="active">Generate Contours</button>
         </div>
     </div>
 </div>
@@ -1609,6 +2077,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const propContainer = document.getElementById('properties-container');
     const propCount = document.getElementById('prop-entity-count');
     const angleUnitsSelect = document.getElementById('angleUnits');
+    const paperSizeSelect = document.getElementById('paperSize');
     const printScaleSelect = document.getElementById('printScale');
     const lineWidthSelect = document.getElementById('lineWidth');
     const toastContainer = document.getElementById('toast-container');
@@ -1666,6 +2135,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     const savedUnit = localStorage.getItem('cad_angle_unit') || 'deg';
     angleUnitsSelect.value = savedUnit;
+    const savedPaperSize = localStorage.getItem('cad_paper_size') || 'A3-L';
+    if ([...paperSizeSelect.options].some(option => option.value === savedPaperSize)) {
+        paperSizeSelect.value = savedPaperSize;
+    }
+    const savedPrintScale = localStorage.getItem('cad_print_scale') || '100';
+    if ([...printScaleSelect.options].some(option => option.value === savedPrintScale)) {
+        printScaleSelect.value = savedPrintScale;
+    }
 
     function showToast(message, type = 'info', duration = 2500) {
         const toast = document.createElement('div');
@@ -1868,6 +2345,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let lastKnownEntityRevision = null;
     let localChangesPending = false;
     let syncTimer = null;
+    let paperFrameDrag = null;
+    let northSymbolDrag = null;
+    const northSymbolSize = 54;
+    const northSymbolGripSize = 10;
+    const northSymbolPadding = 18;
+    const paperFrameBorderHitPx = 8;
+    let northSymbolPosition = {
+        x: parseFloat(localStorage.getItem('cad_north_x')),
+        y: parseFloat(localStorage.getItem('cad_north_y'))
+    };
+    if (!Number.isFinite(northSymbolPosition.x)) northSymbolPosition.x = northSymbolPadding;
+    if (!Number.isFinite(northSymbolPosition.y)) northSymbolPosition.y = northSymbolPadding;
+    let paperFrameCenter = {
+        x: parseFloat(localStorage.getItem('cad_paper_frame_cx')),
+        y: parseFloat(localStorage.getItem('cad_paper_frame_cy'))
+    };
     const tabId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
     const defaultUsername = tabId.slice(0, 4).toUpperCase();
     let username = localStorage.getItem('cad_username') || defaultUsername;
@@ -2029,10 +2522,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     const savedZoom = parseFloat(localStorage.getItem('cad_zoom'));
-    const MAX_ZOOM = 1000;
+    const savedCameraX = parseFloat(localStorage.getItem('cad_camera_x'));
+    const savedCameraY = parseFloat(localStorage.getItem('cad_camera_y'));
+    const hasSavedCameraView = Number.isFinite(savedCameraX) && Number.isFinite(savedCameraY);
+    const MAX_ZOOM = 100000;
     let camera = {
-        x: 0,
-        y: 0,
+        x: Number.isFinite(savedCameraX) ? savedCameraX : 0,
+        y: Number.isFinite(savedCameraY) ? savedCameraY : 0,
         zoom: Number.isFinite(savedZoom) ? Math.max(0.05, Math.min(savedZoom, MAX_ZOOM)) : 1
     };
     const GRID_SIZE = 50;
@@ -2047,7 +2543,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const magnitude = Math.pow(10, Math.floor(Math.log10(rawSize)));
         const normalized = rawSize / magnitude;
         const step = normalized <= 1 ? 1 : (normalized <= 2 ? 2 : (normalized <= 5 ? 5 : 10));
-        return Math.max(1, step * magnitude);
+        return Math.max(0.01, step * magnitude);
     }
 
     function screenToWorld(sx, sy) {
@@ -2065,9 +2561,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         };
     }
 
+    function persistCameraView() {
+        localStorage.setItem('cad_zoom', String(camera.zoom));
+        localStorage.setItem('cad_camera_x', String(camera.x));
+        localStorage.setItem('cad_camera_y', String(camera.y));
+    }
+
     function resize() {
         canvas.width = canvas.parentElement.clientWidth;
         canvas.height = canvas.parentElement.clientHeight;
+        northSymbolPosition.x = Math.max(0, Math.min(canvas.width - northSymbolSize, northSymbolPosition.x));
+        northSymbolPosition.y = Math.max(0, Math.min(canvas.height - northSymbolSize, northSymbolPosition.y));
+        if (!Number.isFinite(paperFrameCenter.x) || !Number.isFinite(paperFrameCenter.y)) {
+            const center = screenToWorld(canvas.width / 2, canvas.height / 2);
+            paperFrameCenter.x = center.x;
+            paperFrameCenter.y = center.y;
+        }
         render();
     }
     window.addEventListener('resize', resize);
@@ -2350,27 +2859,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return { discrete: snaps, segments: allSegments };
     }
 
-    function findBestSnap(mouseScreenX, mouseScreenY, excludeEntity = null) {
+    function findNearestLineIntersectionSnap(mouseScreenX, mouseScreenY, excludeEntity = null, maxScreenDistance = 24) {
+        const lineLikeEntities = entities.filter(ent => ent !== excludeEntity && ['line', 'rect', 'pline'].includes(ent.type));
+        const cursorWorld = screenToWorld(mouseScreenX, mouseScreenY);
+        const candidateSegments = [];
+
+        lineLikeEntities.forEach(ent => {
+            getEntitySegments(ent).forEach(seg => {
+                const projection = pointToSegmentDistance(cursorWorld.x, cursorWorld.y, seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y);
+                const screenPoint = worldToScreen(projection.x, projection.y);
+                candidateSegments.push({
+                    seg,
+                    screenDistance: Math.hypot(mouseScreenX - screenPoint.x, mouseScreenY - screenPoint.y)
+                });
+            });
+        });
+
+        candidateSegments.sort((a, b) => a.screenDistance - b.screenDistance);
+
+        const segmentPool = candidateSegments.slice(0, 16);
+        let bestSnap = null;
+        let bestScore = Infinity;
+
+        for (let i = 0; i < segmentPool.length; i++) {
+            for (let j = i + 1; j < segmentPool.length; j++) {
+                const firstSegment = segmentPool[i].seg;
+                const secondSegment = segmentPool[j].seg;
+                const intersection = getLineIntersection(firstSegment.p1, firstSegment.p2, secondSegment.p1, secondSegment.p2);
+                if (!intersection) continue;
+
+                const screenPoint = worldToScreen(intersection.x, intersection.y);
+                const distance = Math.hypot(mouseScreenX - screenPoint.x, mouseScreenY - screenPoint.y);
+                const proximityScore = distance + segmentPool[i].screenDistance + segmentPool[j].screenDistance;
+                if (distance <= maxScreenDistance && proximityScore < bestScore) {
+                    bestScore = proximityScore;
+                    bestSnap = {
+                        worldX: intersection.x,
+                        worldY: intersection.y,
+                        screenX: screenPoint.x,
+                        screenY: screenPoint.y,
+                        type: 'intersection'
+                    };
+                }
+            }
+        }
+        return bestSnap;
+    }
+
+    function findBestSnap(mouseScreenX, mouseScreenY, excludeEntity = null, options = {}) {
         if (!document.getElementById('osnapToggle').checked) return null;
+        const discreteOnly = !!options.discreteOnly;
+        const segmentOnly = !!options.segmentOnly;
+        const toleranceMultiplier = options.toleranceMultiplier ?? 1;
+        const preferIntersections = !!options.preferIntersections;
+        const snapPriority = type => ({
+            intersection: 0,
+            endpoint: 1,
+            center: 2,
+            quadrant: 3,
+            midpoint: 4,
+            perpendicular: 5,
+            tangent: 6,
+            nearest: 7
+        }[type] ?? 99);
 
         const cursorWorld = screenToWorld(mouseScreenX, mouseScreenY);
         const refPt = isDrawing ? (currentTool === 'pline' && plineVertices.length > 0 ? plineVertices[plineVertices.length - 1] : startPoint) : (activeGrip ? activeGrip.startWorld : null);
         const { discrete, segments } = getSnapCandidates(refPt, excludeEntity);
 
         let bestSnap = null;
+        let bestPriority = 99;
         // During drawing, increase snap tolerance to make snapping easier
-        let minDistance = isDrawing ? SNAP_TOLERANCE_PX * 1.5 : SNAP_TOLERANCE_PX;
+        let minDistance = (isDrawing ? SNAP_TOLERANCE_PX * 1.5 : SNAP_TOLERANCE_PX) * toleranceMultiplier;
 
-        discrete.forEach(pt => {
-            const screenPt = worldToScreen(pt.x, pt.y);
-            const d = Math.hypot(mouseScreenX - screenPt.x, mouseScreenY - screenPt.y);
-            if (d < minDistance) {
-                minDistance = d;
-                bestSnap = { worldX: pt.x, worldY: pt.y, screenX: screenPt.x, screenY: screenPt.y, type: pt.type };
-            }
-        });
+        if (!segmentOnly && preferIntersections) {
+            discrete.forEach(pt => {
+                if (pt.type !== 'intersection') return;
+                const screenPt = worldToScreen(pt.x, pt.y);
+                const d = Math.hypot(mouseScreenX - screenPt.x, mouseScreenY - screenPt.y);
+                if (d < minDistance) {
+                    minDistance = d;
+                    bestPriority = snapPriority(pt.type);
+                    bestSnap = { worldX: pt.x, worldY: pt.y, screenX: screenPt.x, screenY: screenPt.y, type: pt.type };
+                }
+            });
+            if (bestSnap) return bestSnap;
+        }
 
-        if (bestSnap) return bestSnap;
+        if (!segmentOnly) {
+            discrete.forEach(pt => {
+                const screenPt = worldToScreen(pt.x, pt.y);
+                const d = Math.hypot(mouseScreenX - screenPt.x, mouseScreenY - screenPt.y);
+                const priority = snapPriority(pt.type);
+                if (d < minDistance && (priority < bestPriority || (priority === bestPriority && d < Math.hypot(mouseScreenX - bestSnap.screenX, mouseScreenY - bestSnap.screenY)))) {
+                    minDistance = d;
+                    bestPriority = priority;
+                    bestSnap = { worldX: pt.x, worldY: pt.y, screenX: screenPt.x, screenY: screenPt.y, type: pt.type };
+                }
+            });
+
+            if (bestSnap) return bestSnap;
+        }
+
+        if (discreteOnly) return bestSnap;
 
         segments.forEach(seg => {
             const res = pointToSegmentDistance(cursorWorld.x, cursorWorld.y, seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y);
@@ -2382,7 +2973,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
 
-        entities.filter(e => e !== excludeEntity).forEach(e => {
+        if (!segmentOnly) entities.filter(e => e !== excludeEntity).forEach(e => {
             if (e.type === 'circle') {
                 const angle = Math.atan2(cursorWorld.y - e.cy, cursorWorld.x - e.cx);
                 const nx = e.cx + e.r * Math.cos(angle);
@@ -2560,6 +3151,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return null;
     }
 
+    function hitTestAngleDimensionGrip(screenX, screenY) {
+        for (const ent of entities) {
+            if (ent.type !== 'dimension' || ent.kind !== 'angle') continue;
+            const grip = hitTestGrip(screenX, screenY, ent);
+            if (grip) return grip;
+        }
+        return null;
+    }
+
     function applyGripModification(grip, targetPt) {
         const ent = grip.entity;
         const init = grip.initialState;
@@ -2635,12 +3235,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else if (ent.type === 'dimension' && ent.kind === 'angle') {
             if (grip.id === 'center') {
                 ent.cx = init.cx + dx; ent.cy = init.cy + dy;
-                ent.ray1X = (init.ray1X ?? getAngleDimensionRayEnd(init, 'start').x) + dx;
-                ent.ray1Y = (init.ray1Y ?? getAngleDimensionRayEnd(init, 'start').y) + dy;
-                ent.ray2X = (init.ray2X ?? getAngleDimensionRayEnd(init, 'end').x) + dx;
-                ent.ray2Y = (init.ray2Y ?? getAngleDimensionRayEnd(init, 'end').y) + dy;
-                ent.textX = (init.textX ?? getDimensionTextPosition(init).x) + dx;
-                ent.textY = (init.textY ?? getDimensionTextPosition(init).y) + dy;
+                const ray1 = { x: init.ray1X ?? ent.ray1X, y: init.ray1Y ?? ent.ray1Y };
+                const ray2 = { x: init.ray2X ?? ent.ray2X, y: init.ray2Y ?? ent.ray2Y };
+                ent.startAzi = calculateAzimuthRad(ray1.x - ent.cx, ray1.y - ent.cy);
+                ent.endAzi = calculateAzimuthRad(ray2.x - ent.cx, ray2.y - ent.cy);
             } else if (grip.id === 'start') {
                 ent.ray1X = targetPt.x;
                 ent.ray1Y = targetPt.y;
@@ -2875,6 +3473,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 ent.x1 += offsetX; ent.y1 += offsetY;
                 ent.x2 += offsetX; ent.y2 += offsetY;
+                if (Number.isFinite(ent.textX) && Number.isFinite(ent.textY)) {
+                    ent.textX += offsetX;
+                    ent.textY += offsetY;
+                }
             }
         }
         return ent;
@@ -2925,6 +3527,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setActiveToolbarButton('btn-move');
         statusMode.innerText = 'MOVE: BASE POINT';
         showToast('Specify the base point.', 'info', 2200);
+        primeActiveSnap();
         render();
     }
 
@@ -3136,7 +3739,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             offset,
             textX: dimensionPoint.x,
             textY: dimensionPoint.y,
-            decimals: 3,
+            decimals: 2,
             color: document.getElementById('strokeColor').value,
             width: Math.max(1, parseInt(document.getElementById('lineWidth').value))
         };
@@ -3308,6 +3911,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setActiveToolbarButton('btn-dimension');
         statusMode.innerText = 'DIMENSION: FIRST POINT';
         showToast('Select the first point.', 'info', 2200);
+        primeActiveSnap();
         render();
     }
 
@@ -3316,6 +3920,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         setActiveToolbarButton('btn-angle-dimension');
         statusMode.innerText = 'ANGLE DIMENSION: VERTEX';
         showToast('Select the angle vertex.', 'info', 2200);
+        primeActiveSnap();
         render();
     }
 
@@ -3510,14 +4115,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return isPointInsideBoundary(point, hatchBoundary);
     }
 
-    function getCommandPoint(screenX, screenY) {
-        activeSnap = findBestSnap(screenX, screenY, null);
+    function getCommandPoint(screenX, screenY, options = {}) {
+        activeSnap = findBestSnap(screenX, screenY, null, options);
         if (activeSnap) return { x: activeSnap.worldX, y: activeSnap.worldY };
         const raw = screenToWorld(screenX, screenY);
         if (document.getElementById('snapGrid').checked) {
-            return { x: Math.round(raw.x / 10) * 10, y: Math.round(raw.y / 10) * 10 };
+            const gridSize = getGridSize();
+            return {
+                x: Math.round(raw.x / gridSize) * gridSize,
+                y: Math.round(raw.y / gridSize) * gridSize
+            };
         }
         return raw;
+    }
+
+    function primeActiveSnap() {
+        const screenPoint = worldToScreen(currentMouse.x, currentMouse.y);
+        activeSnap = findBestSnap(screenPoint.x, screenPoint.y, null, {});
     }
 
     function drawGrid() {
@@ -3547,6 +4161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const gridSpacingPx = gridSize * camera.zoom;
         if (gridSpacingPx >= 30) {
+            const gridLabelDecimals = gridSize < 0.1 ? 2 : (gridSize < 1 ? 1 : 0);
             ctx.save();
             ctx.fillStyle = '#777';
             ctx.font = '10px Consolas, monospace';
@@ -3555,7 +4170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const screenX = worldToScreen(x, 0).x;
                 if (screenX >= 2 && screenX <= canvas.width - 2) {
                     ctx.textAlign = 'center';
-                    ctx.fillText(String(Math.round(x)), screenX, canvas.height - 14);
+                    ctx.fillText(x.toFixed(gridLabelDecimals), screenX, canvas.height - 14);
                 }
             }
             ctx.textAlign = 'left';
@@ -3563,7 +4178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             for (let y = startY; y <= endY; y += gridSize) {
                 const screenY = worldToScreen(0, y).y;
                 if (screenY >= 2 && screenY <= canvas.height - 2) {
-                    ctx.fillText(String(Math.round(y)), 4, screenY);
+                    ctx.fillText(y.toFixed(gridLabelDecimals), 4, screenY);
                 }
             }
             ctx.restore();
@@ -3577,9 +4192,179 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ctx.beginPath(); ctx.moveTo(orig.x, 0); ctx.lineTo(orig.x, canvas.height); ctx.stroke();
     }
 
-    function drawGrips(ent) {
+    function getPrintFrameSpec() {
+        const map = {
+            A4: { widthMm: 210, heightMm: 297 },
+            A3: { widthMm: 297, heightMm: 420 },
+            A2: { widthMm: 420, heightMm: 594 },
+            A1: { widthMm: 594, heightMm: 841 },
+            A0: { widthMm: 841, heightMm: 1189 }
+        };
+        const value = String(paperSizeSelect.value || 'A3-L');
+        const [base = 'A3', orientation = 'L'] = value.split('-');
+        const spec = map[base] || map.A3;
+        const portrait = orientation === 'P';
+        return {
+            name: `${base} ${portrait ? 'Portrait' : 'Landscape'}`,
+            widthMm: portrait ? spec.widthMm : spec.heightMm,
+            heightMm: portrait ? spec.heightMm : spec.widthMm
+        };
+    }
+
+    function getPrintFrameGeometry() {
+        const spec = getPrintFrameSpec();
+        const scale = Number(printScaleSelect.value) || 100;
+        const frameWidth = (spec.widthMm / 1000) * scale;
+        const frameHeight = (spec.heightMm / 1000) * scale;
+        if (!Number.isFinite(paperFrameCenter.x) || !Number.isFinite(paperFrameCenter.y)) {
+            const center = screenToWorld(canvas.width / 2, canvas.height / 2);
+            paperFrameCenter.x = center.x;
+            paperFrameCenter.y = center.y;
+        }
+        return { spec, frameWidth, frameHeight, centerX: paperFrameCenter.x, centerY: paperFrameCenter.y };
+    }
+
+    function drawPrintFrame() {
+        const { spec, frameWidth, frameHeight, centerX, centerY } = getPrintFrameGeometry();
+        const scale = Number(printScaleSelect.value) || 100;
+        const zoom = Math.max(0.05, camera.zoom);
+        const realWidth = frameWidth;
+        const realHeight = frameHeight;
+        const x = centerX - frameWidth / 2;
+        const y = centerY - frameHeight / 2;
+        const topLeft = worldToScreen(x, y + frameHeight);
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.lineWidth = Math.max(0.8, 1.4 / zoom);
+        ctx.setLineDash([10 / zoom, 6 / zoom]);
+        ctx.strokeRect(topLeft.x, topLeft.y, frameWidth * camera.zoom, frameHeight * camera.zoom);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.font = '10px Consolas, monospace';
+        ctx.textBaseline = 'top';
+        ctx.fillText(
+            `${spec.name} (${spec.widthMm} x ${spec.heightMm} mm / ${realWidth.toFixed(1)} x ${realHeight.toFixed(1)} units)`,
+            topLeft.x + frameWidth * camera.zoom - 268,
+            topLeft.y + 6
+        );
+        ctx.restore();
+    }
+
+    function getPrintFrameRectWorld() {
+        const { frameWidth, frameHeight, centerX, centerY } = getPrintFrameGeometry();
+        return {
+            left: centerX - frameWidth / 2,
+            right: centerX + frameWidth / 2,
+            top: centerY + frameHeight / 2,
+            bottom: centerY - frameHeight / 2,
+            width: frameWidth,
+            height: frameHeight
+        };
+    }
+
+    function hitTestPrintFrame(screenX, screenY) {
+        const rect = getPrintFrameRectWorld();
+        const tl = worldToScreen(rect.left, rect.top);
+        const br = worldToScreen(rect.right, rect.bottom);
+        const left = Math.min(tl.x, br.x);
+        const right = Math.max(tl.x, br.x);
+        const top = Math.min(tl.y, br.y);
+        const bottom = Math.max(tl.y, br.y);
+        const onBorder =
+            (screenX >= left - paperFrameBorderHitPx && screenX <= right + paperFrameBorderHitPx &&
+                Math.abs(screenY - top) <= paperFrameBorderHitPx) ||
+            (screenX >= left - paperFrameBorderHitPx && screenX <= right + paperFrameBorderHitPx &&
+                Math.abs(screenY - bottom) <= paperFrameBorderHitPx) ||
+            (screenY >= top - paperFrameBorderHitPx && screenY <= bottom + paperFrameBorderHitPx &&
+                Math.abs(screenX - left) <= paperFrameBorderHitPx) ||
+            (screenY >= top - paperFrameBorderHitPx && screenY <= bottom + paperFrameBorderHitPx &&
+                Math.abs(screenX - right) <= paperFrameBorderHitPx);
+        const inside = screenX >= left && screenX <= right && screenY >= top && screenY <= bottom;
+        return { onBorder, inside, rectScreen: { left, right, top, bottom } };
+    }
+
+    function getNorthSymbolRect() {
+        const x = Math.max(0, Math.min(canvas.width - northSymbolSize, northSymbolPosition.x));
+        const y = Math.max(0, Math.min(canvas.height - northSymbolSize, northSymbolPosition.y));
+        return { x, y, w: northSymbolSize, h: northSymbolSize };
+    }
+
+    function hitTestNorthSymbol(screenX, screenY) {
+        const rect = getNorthSymbolRect();
+        const centerX = rect.x + rect.w / 2;
+        const centerY = rect.y + rect.h / 2;
+        const ringRadius = rect.w * 0.28;
+        const ringDistance = Math.hypot(screenX - centerX, screenY - centerY);
+        const gripX = rect.x + rect.w - northSymbolGripSize * 0.9;
+        const gripY = rect.y + rect.h - northSymbolGripSize * 0.9;
+        const gripHit = screenX >= gripX - 6 && screenX <= gripX + northSymbolGripSize + 6 &&
+            screenY >= gripY - 6 && screenY <= gripY + northSymbolGripSize + 6;
+        return ringDistance <= ringRadius + 10 || gripHit;
+    }
+
+    function drawNorthSymbol() {
+        const rect = getNorthSymbolRect();
+        const cx = rect.x + rect.w / 2;
+        const cy = rect.y + rect.h / 2;
+        const size = rect.w;
+        const ringR = size * 0.22;
+        const arrowTop = rect.y + 6;
+        const arrowBottom = rect.y + size - 11;
+        const arrowX = cx;
+        const isHover = northSymbolDrag !== null;
+        const accent = isHover ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.78)';
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = accent;
+        ctx.fillStyle = 'rgba(12, 12, 12, 0.42)';
+        ctx.lineWidth = 1.2;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringR + 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowTop);
+        ctx.lineTo(arrowX, arrowBottom);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(arrowX, arrowTop);
+        ctx.lineTo(arrowX - 6, arrowTop + 9);
+        ctx.lineTo(arrowX + 6, arrowTop + 9);
+        ctx.closePath();
+        ctx.fillStyle = accent;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.font = 'bold 11px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = accent;
+        ctx.fillText('N', cx, cy + 0.5);
+
+        const gripX = rect.x + rect.w - northSymbolGripSize;
+        const gripY = rect.y + rect.h - northSymbolGripSize;
+        ctx.fillStyle = 'rgba(120, 120, 120, 0.9)';
+        ctx.strokeStyle = 'rgba(20, 20, 20, 0.95)';
+        ctx.fillRect(gripX, gripY, northSymbolGripSize, northSymbolGripSize);
+        ctx.strokeRect(gripX, gripY, northSymbolGripSize, northSymbolGripSize);
+        ctx.restore();
+    }
+
+    function drawGrips(ent, isSelected = false) {
         const grips = getEntityGrips(ent);
+        const isAngleDimension = ent.type === 'dimension' && ent.kind === 'angle';
+        const showFullGripInfo = !isAngleDimension || isSelected;
         grips.forEach(g => {
+            if (isAngleDimension && !isSelected && g.id === 'position') return;
             const sp = worldToScreen(g.x, g.y);
             const isHot = (activeGrip && activeGrip.id === g.id);
             const isHover = (hoveredGrip && hoveredGrip.id === g.id);
@@ -3599,7 +4384,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctx.strokeRect(sp.x - size / 2, sp.y - size / 2, size, size);
             }
 
-            if (g.label) {
+            if (showFullGripInfo && g.label) {
                 ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
                 const textWidth = ctx.measureText(g.label).width;
                 const badgeX = sp.x + 8;
@@ -3861,28 +4646,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const angleValue = getAngleDimensionSweep(ent);
             const label = `${azimuthRadToValue(angleValue).toFixed(getDimensionDecimals(ent))}${getAngleUnitLabel()}`;
 
-            ctx.save();
-            ctx.strokeStyle = ent.color || '#ffd166';
-            ctx.lineWidth = 1.2;
-            ctx.beginPath();
-            ctx.moveTo(center.x, center.y);
-            ctx.lineTo(ray1.x, ray1.y);
-            ctx.moveTo(center.x, center.y);
-            ctx.lineTo(ray2.x, ray2.y);
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.arc(center.x, center.y, ent.r * camera.zoom, startAngle, endAngle, arc.direction < 0);
-            ctx.stroke();
-            ctx.restore();
-
             const textPosition = worldToScreen(getDimensionTextPosition(ent).x, getDimensionTextPosition(ent).y);
+            const labelPosition = { x: textPosition.x, y: textPosition.y + 12 };
             ctx.save();
             ctx.font = '11px Consolas, monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = ent.color || '#ffd166';
-            drawCurvedAngleDimensionText(center, textPosition, label, ent.color || '#ffd166');
+            drawCurvedAngleDimensionText(center, labelPosition, label, ent.color || '#ffd166');
             ctx.restore();
         }
         else if (ent.type === 'dimension') {
@@ -3924,9 +4695,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         ctx.restore();
 
-        if (isSelected && !isTemp) {
+        if (!isTemp && (isSelected || (ent.type === 'dimension' && ent.kind === 'angle'))) {
             try {
-                drawGrips(ent);
+                drawGrips(ent, isSelected);
             } catch (err) {
                 console.error("Grip render error:", err);
             }
@@ -4097,7 +4868,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return triangles.filter(triangle => triangle.a < superStart && triangle.b < superStart && triangle.c < superStart);
     }
 
-    function generateContours() {
+    function generateContours(interval = 1) {
+        if (!Number.isFinite(interval) || interval <= 0) {
+            showToast('Enter a contour interval greater than zero.', 'warning', 2200);
+            return;
+        }
         const pointEntities = entities.filter(entity => entity.type === 'point')
             .filter(point => Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)) && Number.isFinite(Number(point.z)));
         if (pointEntities.length < 3) {
@@ -4108,17 +4883,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const pointList = pointEntities.map(point => ({ x: Number(point.x), y: Number(point.y), z: Number(point.z) }));
         const minZ = Math.min(...pointList.map(point => point.z));
         const maxZ = Math.max(...pointList.map(point => point.z));
-        const firstLevel = Math.ceil(minZ - 1e-9);
-        const lastLevel = Math.floor(maxZ + 1e-9);
+        const firstLevel = Math.ceil(minZ / interval - 1e-9) * interval;
+        const lastLevel = Math.floor(maxZ / interval + 1e-9) * interval;
         if (firstLevel > lastLevel) {
-            showToast('The point elevations do not span a full 1 m contour interval.', 'warning', 2200);
+            showToast(`The point elevations do not span a full ${interval} m contour interval.`, 'warning', 2200);
             return;
         }
 
         const triangles = getDelaunayTriangles(pointList);
         const segmentsByLevel = new Map();
         const pointKey = point => `${Math.round(point.x * 1e6)}:${Math.round(point.y * 1e6)}`;
-        for (let level = firstLevel; level <= lastLevel; level++) {
+        for (let level = firstLevel; level <= lastLevel + interval * 1e-9; level += interval) {
+            level = Number(level.toFixed(9));
             const segments = [];
             triangles.forEach(triangle => {
                 const trianglePoints = [pointList[triangle.a], pointList[triangle.b], pointList[triangle.c]];
@@ -4202,12 +4978,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         updatePropertiesPalette();
         render();
         triggerAutoSave();
-        showToast(`${contourCount} contour polylines generated at 1 m intervals.`, 'success', 2500);
+        showToast(`${contourCount} contour polylines generated at ${interval} m intervals.`, 'success', 2500);
     }
 
     function render() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawGrid();
+        drawPrintFrame();
 
         entities.forEach(ent => {
             try {
@@ -4235,6 +5012,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (dimensionPreview) drawEntity(dimensionPreview, true);
 
         drawIntersectionMarkers();
+        drawNorthSymbol();
 
         if (isDrawing) {
             const color = document.getElementById('strokeColor').value;
@@ -4272,11 +5050,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Draw snap marker: during drawing, show snap to existing entities
+        // Draw snap marker while constructing or manipulating geometry.
         if (activeSnap) {
             // Only exclude an entity if we have an active grip
             const snapToShow = activeSnap;
-            if (isDrawing || activeGrip || moveCommand) {
+            if (currentTool !== 'select' || isDrawing || activeGrip || moveCommand || dimensionCommand || angleDimensionCommand) {
                 drawSnapMarker(snapToShow);
             }
         }
@@ -5185,6 +5963,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const rect = canvas.getBoundingClientRect();
         const mouseScreen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        if (e.button === 0 && hitTestNorthSymbol(mouseScreen.x, mouseScreen.y)) {
+            northSymbolDrag = {
+                offsetX: mouseScreen.x - getNorthSymbolRect().x,
+                offsetY: mouseScreen.y - getNorthSymbolRect().y
+            };
+            canvas.style.cursor = 'move';
+            return;
+        }
+        if (e.button === 0 && currentTool === 'select') {
+            const frameHit = hitTestPrintFrame(mouseScreen.x, mouseScreen.y);
+            if (frameHit.onBorder) {
+                const frameRect = getPrintFrameRectWorld();
+                paperFrameDrag = {
+                    offsetX: screenToWorld(mouseScreen.x, mouseScreen.y).x - (frameRect.left + frameRect.width / 2),
+                    offsetY: screenToWorld(mouseScreen.x, mouseScreen.y).y - (frameRect.bottom + frameRect.height / 2)
+                };
+                canvas.style.cursor = 'move';
+                return;
+            }
+        }
         const mouseWorld = screenToWorld(mouseScreen.x, mouseScreen.y);
 
         if (e.button === 0 && isImageCaptureMode) {
@@ -5230,7 +6028,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 return;
             }
             if (angleDimensionCommand) {
-                const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
+                const commandPoint = activeSnap
+                    ? { x: activeSnap.worldX, y: activeSnap.worldY }
+                    : getCommandPoint(mouseScreen.x, mouseScreen.y, { discreteOnly: true });
                 if (!angleDimensionCommand.vertex) {
                     angleDimensionCommand.vertex = commandPoint;
                     statusMode.innerText = 'ANGLE DIMENSION: FIRST RAY';
@@ -5439,6 +6239,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
 
+                const angleGripHit = hitTestAngleDimensionGrip(mouseScreen.x, mouseScreen.y);
+                if (angleGripHit) {
+                    saveState();
+                    selectedHatch = null;
+                    selectedEntity = angleGripHit.entity;
+                    selectedEntities = new Set([angleGripHit.entity]);
+                    selectedSegmentIndex = null;
+                    activeGrip = {
+                        ...angleGripHit,
+                        startWorld: { ...mouseWorld },
+                        initialState: JSON.parse(JSON.stringify(angleGripHit.entity))
+                    };
+                    statusMode.innerText = `GRIP: ${angleGripHit.type.toUpperCase()}`;
+                    updatePropertiesPalette();
+                    render();
+                    return;
+                }
+
                 const hit = hitTestEntity(mouseWorld, mouseScreen);
                 if (hit) {
                     if (hit.hatch) {
@@ -5599,6 +6417,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isPanning) {
             camera.x = e.clientX - panStart.x;
             camera.y = e.clientY - panStart.y;
+            persistCameraView();
             render();
             return;
         }
@@ -5606,6 +6425,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const rect = canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
+
+        if (northSymbolDrag) {
+            northSymbolPosition.x = Math.max(0, Math.min(canvas.width - northSymbolSize, sx - northSymbolDrag.offsetX));
+            northSymbolPosition.y = Math.max(0, Math.min(canvas.height - northSymbolSize, sy - northSymbolDrag.offsetY));
+            localStorage.setItem('cad_north_x', String(northSymbolPosition.x));
+            localStorage.setItem('cad_north_y', String(northSymbolPosition.y));
+            canvas.style.cursor = 'move';
+            render();
+            return;
+        }
+
+        if (paperFrameDrag) {
+            const currentWorld = screenToWorld(sx, sy);
+            paperFrameCenter.x = currentWorld.x - paperFrameDrag.offsetX;
+            paperFrameCenter.y = currentWorld.y - paperFrameDrag.offsetY;
+            localStorage.setItem('cad_paper_frame_cx', String(paperFrameCenter.x));
+            localStorage.setItem('cad_paper_frame_cy', String(paperFrameCenter.y));
+            canvas.style.cursor = 'move';
+            render();
+            return;
+        }
 
         if (imageCaptureSelection) {
             imageCaptureSelection.current = {
@@ -5653,11 +6493,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return;
         }
 
-        if (selectedEntity && !activeGrip && currentTool === 'select') {
-            hoveredGrip = hitTestGrip(sx, sy, selectedEntity);
-            canvas.style.cursor = hoveredGrip ? 'pointer' : 'default';
+        const northHit = hitTestNorthSymbol(sx, sy);
+        if (!activeGrip && currentTool === 'select') {
+            hoveredGrip = selectedEntity ? hitTestGrip(sx, sy, selectedEntity) : hitTestAngleDimensionGrip(sx, sy);
+            canvas.style.cursor = northHit.onBorder ? 'move' : (hoveredGrip ? 'pointer' : 'default');
         } else if (currentTool !== 'select') {
-            canvas.style.cursor = 'crosshair';
+            canvas.style.cursor = northHit.onBorder ? 'move' : 'crosshair';
         }
 
         // During drawing/snapping, don't exclude any entities - we want snap available to ALL existing objects
@@ -5665,7 +6506,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (activeGrip) {
             exclude = activeGrip.entity;
         }
-        activeSnap = findBestSnap(sx, sy, exclude);
+        if (activeGrip && activeGrip.entity.type === 'dimension' && activeGrip.entity.kind === 'angle') {
+            activeSnap = findBestSnap(sx, sy, exclude, { discreteOnly: true });
+        } else {
+            activeSnap = findBestSnap(sx, sy, exclude, {});
+        }
 
         if (activeSnap) {
             currentMouse = { x: activeSnap.worldX, y: activeSnap.worldY };
@@ -5694,7 +6539,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (activeGrip) {
-            const targetPt = applyOrtho(activeGrip.startWorld, currentMouse);
+            const isAngleGrip = activeGrip.entity && activeGrip.entity.type === 'dimension' && activeGrip.entity.kind === 'angle';
+            const targetPt = isAngleGrip ? currentMouse : applyOrtho(activeGrip.startWorld, currentMouse);
             applyGripModification(activeGrip, targetPt);
         }
 
@@ -5717,8 +6563,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             copyCanvasRegionAsJpg(selection.start, selection.current);
             return;
         }
+        if (northSymbolDrag) {
+            northSymbolDrag = null;
+            localStorage.setItem('cad_north_x', String(northSymbolPosition.x));
+            localStorage.setItem('cad_north_y', String(northSymbolPosition.y));
+            canvas.style.cursor = 'default';
+            render();
+            return;
+        }
+        if (paperFrameDrag) {
+            paperFrameDrag = null;
+            localStorage.setItem('cad_paper_frame_cx', String(paperFrameCenter.x));
+            localStorage.setItem('cad_paper_frame_cy', String(paperFrameCenter.y));
+            canvas.style.cursor = 'default';
+            render();
+            return;
+        }
         if (isPanning) {
             isPanning = false;
+            persistCameraView();
         }
         if (isSelectingBox) {
             const rect = canvas.getBoundingClientRect();
@@ -5789,7 +6652,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         camera.x = mouseX - canvas.width / 2 - worldBefore.x * camera.zoom;
         camera.y = mouseY - canvas.height / 2 + worldBefore.y * camera.zoom;
 
-        localStorage.setItem('cad_zoom', String(camera.zoom));
+        persistCameraView();
         statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
         render();
     }, { passive: false });
@@ -5804,8 +6667,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         showToast(`Angle unit: ${unitLabel}`, 'info');
     });
 
+    paperSizeSelect.addEventListener('change', () => {
+        localStorage.setItem('cad_paper_size', paperSizeSelect.value);
+        render();
+    });
+
     lineWidthSelect.addEventListener('change', () => {
         triggerAutoSave();
+    });
+
+    printScaleSelect.addEventListener('change', () => {
+        localStorage.setItem('cad_print_scale', printScaleSelect.value);
+        render();
     });
 
     // Copy a user-dragged canvas crop as JPEG, with a download fallback when clipboard access is blocked.
@@ -5899,7 +6772,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         dataInput.value = JSON.stringify({ 
             entities: entities,
             angleUnit: angleUnitsSelect.value,
-            printScale: Number(printScaleSelect.value)
+            printScale: Number(printScaleSelect.value),
+            paperSize: paperSizeSelect.value,
+            paperFrameCenterX: paperFrameCenter.x,
+            paperFrameCenterY: paperFrameCenter.y
         });
         const scaleInput = document.createElement('input');
         scaleInput.type = 'hidden';
@@ -6142,21 +7018,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const pointImportModal = document.getElementById('point-import-modal');
     const pointImportInput = document.getElementById('point-import-input');
     const pointImportHasLabels = document.getElementById('point-import-has-labels');
+    const contourInterval = document.getElementById('contour-interval');
+    const pointImportFields = document.getElementById('point-import-fields');
     const closePointImport = () => {
         pointImportModal.classList.remove('open');
         pointImportInput.value = '';
     };
 
-    document.getElementById('btn-import-points').addEventListener('click', () => {
+    document.getElementById('btn-generate-contours').addEventListener('click', () => {
         pointImportModal.classList.add('open');
-        pointImportInput.focus();
+        contourInterval.focus();
     });
-    document.getElementById('btn-generate-contours').addEventListener('click', generateContours);
+    document.querySelectorAll('input[name="contour-point-source"]').forEach(input => {
+        input.addEventListener('change', () => {
+            const importingPoints = input.value === 'new' && input.checked;
+            pointImportFields.hidden = !importingPoints;
+            if (importingPoints) pointImportInput.focus();
+        });
+    });
     document.getElementById('btn-cancel-point-import').addEventListener('click', closePointImport);
     pointImportModal.addEventListener('click', (event) => {
         if (event.target === pointImportModal) closePointImport();
     });
     document.getElementById('btn-apply-point-import').addEventListener('click', () => {
+        const interval = parseStrictFloat(contourInterval.value, NaN);
+        if (!Number.isFinite(interval) || interval <= 0) {
+            showToast('Enter a contour interval greater than zero.', 'warning', 2200);
+            contourInterval.focus();
+            return;
+        }
+        const importingPoints = document.querySelector('input[name="contour-point-source"]:checked').value === 'new';
+        if (!importingPoints) {
+            closePointImport();
+            generateContours(interval);
+            return;
+        }
         const lines = pointImportInput.value.split(/\r?\n/);
         const importedPoints = [];
         const invalidLines = [];
@@ -6203,12 +7099,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         updatePropertiesPalette();
         render();
         showToast(`${importedPoints.length} point(s) added.`, 'success', 2000);
+        generateContours(interval);
     });
 
     document.getElementById('btn-move').addEventListener('click', startMoveCommand);
     document.getElementById('btn-offset').addEventListener('click', startOffsetCommand);
+        document.getElementById('btn-dimension').addEventListener('click', startDimensionCommand);
         document.getElementById('btn-trim').addEventListener('click', startTrimCommand);
-    document.getElementById('btn-hatch').addEventListener('click', startHatchCommand);
+        document.getElementById('btn-hatch').addEventListener('click', startHatchCommand);
 
     saveButton.addEventListener('click', () => {
         clearTimeout(autoSaveTimer);
@@ -6254,7 +7152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     angleUnitsSelect.value = res.data.angleUnit;
                     localStorage.setItem('cad_angle_unit', res.data.angleUnit);
                 }
-                if (!entitiesOnly && Number.isFinite(Number(res.data.zoom))) {
+                if (!entitiesOnly && !hasSavedCameraView && Number.isFinite(Number(res.data.zoom))) {
                     camera.zoom = Math.max(0.05, Math.min(Number(res.data.zoom), MAX_ZOOM));
                     localStorage.setItem('cad_zoom', String(camera.zoom));
                     statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
@@ -6266,7 +7164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if (!entitiesOnly) resize();
                 const hasSavedView = Number.isFinite(Number(res.data.viewCenterX)) && Number.isFinite(Number(res.data.viewCenterY));
-                if (!entitiesOnly && hasSavedView) {
+                if (!entitiesOnly && !hasSavedCameraView && hasSavedView) {
                     let viewCenterX = Number(res.data.viewCenterX);
                     if (Number(res.data.viewCenterVersion) !== 2) {
                         viewCenterX -= canvas.width / (2 * camera.zoom);
@@ -6274,7 +7172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     camera.x = -viewCenterX * camera.zoom;
                     camera.y = Number(res.data.viewCenterY) * camera.zoom;
                 }
-                if (fitInitialView && !hasSavedView && entities.length > 0) {
+                if (fitInitialView && !hasSavedView && !hasSavedCameraView && entities.length > 0) {
                     zoomToExtents();
                 }
                 if (!entitiesOnly && ['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
@@ -6348,7 +7246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
     resize();
     refreshDrawingList();
-    loadDrawing(drawingFileName.value, false, true);
+    loadDrawing(drawingFileName.value, false, false);
     updatePresence();
     window.setInterval(updatePresence, 5000);
     window.setInterval(checkForRemoteChanges, 3000);
