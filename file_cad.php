@@ -2735,6 +2735,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return rad * 180 / Math.PI;
     }
 
+    function executeUndo() {
         if (currentTool === 'pline' && isDrawing && plineVertices.length > 0) {
             plineVertices.pop();
             if (plineVertices.length === 0) isDrawing = false;
