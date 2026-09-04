@@ -5937,6 +5937,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             getMovePreviewEntities().forEach(entity => drawEntity(entity, true));
             ctx.restore();
         }
+        if (scaleCommand && scaleCommand.basePoint && Number.isFinite(scaleCommand.factor)) {
             ctx.save();
             ctx.globalAlpha = 0.35;
             getScalePreviewEntities().forEach(entity => drawEntity(entity, true));
