@@ -1,209 +1,262 @@
-# Web CAD Engine — v10
-
-Browser-based 2D CAD editor built as a self-contained PHP application. The
-current release is available in [`cad-v10.php`](./cad-v10.php); it preserves
-the complete v9 editor while providing a clean v10 entry point.
+# Web CAD Engine
 
 ## Ελληνικά
 
-### Περιγραφή
+### Τι είναι
 
-Το Web CAD Engine είναι ένας αυτοτελής 2D CAD editor για browser. Το
-[`cad-v10.php`](./cad-v10.php) περιέχει σε ένα αρχείο:
+Το Web CAD Engine είναι ένας αυτοτελής 2D CAD editor που εκτελείται σε
+σύγχρονο browser. Η εφαρμογή υλοποιείται στο [cad-v11.php](/workspaces/web-cad-engine/cad-v11.php)
+και περιλαμβάνει στο ίδιο αρχείο:
 
-- PHP API για σχέδια, revisions, παρουσία χρηστών και DXF export.
-- HTML/CSS για toolbar, Canvas, properties palette και dialogs.
-- JavaScript engine για σχεδίαση, επιλογή, grips, OSNAP, commands και
-  αποθήκευση.
+- PHP backend για αποθήκευση και φόρτωση σχεδίων.
+- HTML/CSS interface με toolbar, Canvas, status bar και properties palette.
+- JavaScript μηχανή σχεδίασης, επιλογής, snapping, grips, commands και undo/redo.
+- Παραγωγή AutoCAD 2007/AC1021 ASCII DXF.
 
-Τα σχέδια αποθηκεύονται ως JSON στον ίδιο φάκελο και εξάγονται σε ASCII DXF
-συμβατό με AutoCAD 2007 (AC1021). Δεν απαιτείται database, framework,
-dependency manager ή build step.
+Δεν απαιτείται database, framework, package manager ή build process. Τα σχέδια
+αποθηκεύονται ως JSON αρχεία στον ίδιο φάκελο της εφαρμογής.
 
 ### Εκκίνηση
 
-Απαιτούνται PHP με JSON/file functions και σύγχρονος browser με Canvas,
-Fetch API, Clipboard API και `localStorage`.
+Απαιτούνται PHP με υποστήριξη JSON και filesystem functions, καθώς και browser
+με Canvas, Fetch API, Clipboard API και `localStorage`.
 
 ```bash
 php -S localhost:8000
 ```
 
-Άνοιξε:
+Άνοιγμα:
 
 ```text
-http://localhost:8000/cad-v10.php
+http://localhost:8000/cad-v11.php
 ```
 
-Ο server πρέπει να έχει δικαίωμα εγγραφής στον φάκελο, επειδή δημιουργούνται
-και ενημερώνονται drawing JSON και το `cad_presence.json`.
+Ο φάκελος πρέπει να είναι εγγράψιμος, επειδή η εφαρμογή δημιουργεί ή
+ενημερώνει JSON σχέδια και το `cad_presence.json`.
 
-### Αρχιτεκτονική
+### Περιβάλλον εργασίας
 
-1. **PHP backend**
-   - Επιλέγει το drawing από `POST[file]`, cookie ή το προεπιλεγμένο αρχείο.
-   - Επικυρώνει filenames και nicknames.
-   - Υλοποιεί save/load, revisions, entity revisions, drawing list και rename.
-   - Διαχειρίζεται collaborative presence.
-   - Παράγει DXF 2007 μέσω `generateDXF2007()`.
-2. **HTML/CSS interface**
-   - Παρέχει toolbar, Canvas, status bar, properties palette και modals.
-3. **JavaScript editor**
-   - Διατηρεί τα entities στη μεταβλητή `entities`.
-   - Μετατρέπει world coordinates σε screen coordinates.
-   - Εκτελεί render, hit-testing, selection, grips, snapping και commands.
-   - Αποθηκεύει τοπικές ρυθμίσεις κάμερας/περιβάλλοντος στο `localStorage`.
+Το interface περιλαμβάνει:
 
-Οι γεωμετρικές συντεταγμένες είναι model/world units. Το zoom επηρεάζει μόνο
-την οθόνη και όχι τις αποθηκευμένες διαστάσεις.
+- toolbar για τα εργαλεία σχεδίασης και επεξεργασίας,
+- κεντρικό Canvas για το σχέδιο,
+- properties palette για τις ιδιότητες του επιλεγμένου entity,
+- επιλογές χαρτιού, κλίμακας εκτύπωσης και γωνιακών μονάδων,
+- status bar για ενεργό εργαλείο, OSNAP, συντεταγμένες και κατάσταση αποθήκευσης.
 
-Το Scale εφαρμόζεται στα επιλεγμένα αντικείμενα γύρω από ένα snap base point.
-Μετά την επιλογή του σημείου ο χρήστης εισάγει απευθείας τον θετικό αριθμητικό
-συντελεστή scale.
+Οι συντεταγμένες αποθηκεύονται σε model/world units. Το zoom και η μετατόπιση
+της κάμερας επηρεάζουν μόνο την προβολή και όχι τη γεωμετρία.
 
-### Εργαλεία και πλοήγηση
+### Εργαλεία σχεδίασης
 
-Διατίθενται:
+Υποστηρίζονται:
 
-- Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse, Point, Text.
-- Move, Scale, Offset, Trim, aligned Dimension, Angle Dimension και Hatch.
+- Select και πολλαπλή επιλογή.
+- Line.
+- Polyline με κλείσιμο, επεξεργασία κορυφών και αντιστροφή κατεύθυνσης.
+- Rectangle.
+- Circle.
+- Arc με ακτίνες και azimuth.
+- Ellipse.
+- Point με όνομα, υψόμετρο `z` και εμφάνιση label.
+- Text.
+- Aligned Dimension.
+- Angular Dimension.
+- Hatch.
 - Generate Contours από υψομετρικά σημεία.
-- Εισαγωγή ελληνικής πινακίδας ως ομαδοποιημένο object.
-- Η πινακίδα χρησιμοποιεί το πρότυπο `pinakidaA4-1.json`, προσαρμόζεται
-  αυτόματα στο ενεργό μέγεθος/προσανατολισμό χαρτιού και διαθέτει πεδία
-  `ERGODOTIS`, `ERGO`, `PERIOXI`, `MELETITIS`, `THEMA_SXEDIOU`, `ARSXED`,
-  `KLIMAKA`, `XRONOSMELETHS` στην properties palette.
-- Export DXF 2007 και αντιγραφή περιοχής σχεδίου ως JPG.
-- OSNAP, Grid Snap, Ortho, undo/redo και multi-selection.
-- Paper frame A0–A4 σε portrait/landscape.
-- Angle units: degrees, grads ή radians.
-- Print scales: 1:50, 1:100, 1:200, 1:500 και 1:1000.
+- Εισαγωγή title board.
 
-Βασικές συντομεύσεις:
+### Εργαλεία επεξεργασίας
+
+- Move.
+- Scale πολλαπλών επιλεγμένων entities γύρω από snap base point με απευθείας
+  εισαγωγή θετικού scale factor.
+- Offset.
+- Trim.
+- Διαγραφή.
+- Undo και redo.
+- Αντιγραφή και επικόλληση.
+
+### Πλοήγηση και βοηθήματα σχεδίασης
+
+Υπάρχουν Grid Snap, Ortho και OSNAP. Τα OSNAP modes ενεργοποιούνται ανεξάρτητα
+και περιλαμβάνουν:
+
+- Endpoint
+- Midpoint
+- Center
+- Quadrant
+- Intersection
+- Perpendicular
+- Tangent
+- Nearest
+
+Το OSNAP εμφανίζει snap preview/highlight όταν ο δείκτης πλησιάζει διαθέσιμο
+σημείο. Οι ρυθμίσεις OSNAP αποθηκεύονται τοπικά στον browser.
+
+### Συντομεύσεις
 
 | Πλήκτρο | Ενέργεια |
 | --- | --- |
-| `F3` | OSNAP |
-| `F8` | Ortho |
-| `M`, `S`, `O`, `T`, `D`, `A`, `H` | Move, Scale, Offset, Trim, Dimension, Angle Dimension, Hatch |
-| `Enter` / δεξί click | Ολοκλήρωση polyline |
+| `F3` | Ενεργοποίηση/απενεργοποίηση OSNAP |
+| `F8` | Ενεργοποίηση/απενεργοποίηση Ortho |
+| `M` | Move |
+| `S` | Scale |
+| `O` | Offset |
+| `T` | Trim |
+| `D` | Aligned Dimension |
+| `A` | Angular Dimension |
+| `H` | Hatch |
+| `Enter` ή δεξί click | Ολοκλήρωση ανοιχτής polyline |
 | `C` | Κλείσιμο polyline |
 | `Ctrl+A` | Επιλογή όλων |
 | `Ctrl+C` / `Ctrl+V` | Αντιγραφή / επικόλληση |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 | `Delete` / `Backspace` | Διαγραφή |
-| `Escape` | Ακύρωση εντολής |
-
-Το OSNAP υποστηρίζει endpoints, midpoints, centers, quadrants,
-intersections, perpendicular, tangent και nearest. Οι ίδιοι τύποι εμφανίζονται
-ως checkbox στην properties palette όταν ενεργοποιείται το OSNAP και μπορούν
-να ενεργοποιούνται ανεξάρτητα.
+| `Escape` | Ακύρωση ενεργού command |
 
 ### Entities
 
-| Type | Κύριες ιδιότητες | Περιγραφή |
-| --- | --- | --- |
-| `line` | `x1`, `y1`, `x2`, `y2` | Γραμμή |
-| `rect` | `x`, `y`, `w`, `h` | Ορθογώνιο |
-| `pline` | `points`, `closed` | Polyline |
-| `circle` | `cx`, `cy`, `r` | Κύκλος |
-| `arc` | `cx`, `cy`, `r`, `startAzi`, `endAzi` | Τόξο με azimuth radians |
-| `ellipse` | `cx`, `cy`, `rx`, `ry` | Έλλειψη |
-| `point` | `x`, `y`, `z`, `name`, `showText` | Σημείο και υψόμετρο |
-| `text` | `x`, `y`, `text`, `height`, `rotation`, `justify`, `textMode`, `textBox`, `fontFamily` | Κείμενο |
-| `dimension` | `kind` και γεωμετρικές ιδιότητες | Απόσταση ή γωνία |
-| `dxf-import` | `children`, `labels` | Εισαγόμενο ομαδοποιημένο σχέδιο |
+Τα entities είναι plain JSON objects. Οι βασικοί τύποι είναι:
 
-Τα περισσότερα entities έχουν επίσης `color` και `width`.
+| Type | Περιεχόμενο |
+| --- | --- |
+| `line` | Δύο endpoints `x1`, `y1`, `x2`, `y2` |
+| `rect` | Γωνία, width και height |
+| `pline` | Λίστα κορυφών και κατάσταση closed |
+| `circle` | Center και radius |
+| `arc` | Center, radius, start/end azimuth σε radians |
+| `ellipse` | Center και ακτίνες `rx`, `ry` |
+| `point` | `x`, `y`, `z`, name και label visibility |
+| `text` | Περιεχόμενο, height, rotation, mode, font και justification |
+| `dimension` | Aligned ή angular dimension |
+| `dxf-import` | Ομαδοποιημένο entity με child entities |
 
-### Text entity
+Τα περισσότερα entities διαθέτουν επίσης `color` και `width`.
 
-Το text υποστηρίζει:
+### Text
 
-- πραγματικό model-space `height`, ανεξάρτητο από zoom,
-- αρχικό ύψος 3 mm στο χαρτί μέσω της επιλεγμένης print scale,
-- `one-line` και `multiline`,
-- εννέα ACAD attachment points:
-  `top|middle|bottom` × `left|center|right`,
-- συμβατότητα παλιών τιμών `left`, `center`, `right`,
-- CAD-friendly fonts: Arial, Arial Narrow, Tahoma, Verdana, Consolas και
+Κάθε text entity υποστηρίζει:
+
+- model-space height,
+- one-line ή multiline mode,
+- εννέα θέσεις justification,
+- rotation,
+- γραμματοσειρές Arial, Arial Narrow, Tahoma, Verdana, Consolas και
   Courier New,
-- live ενημέρωση κατά την πληκτρολόγηση,
-- δυναμικό περίγραμμα και hit-testing,
-- one-line anchor grip στη θέση του justification,
-- multiline corners και midpoints grips,
-- OSNAP στα όρια του text,
-- μετακίνηση grips χωρίς αλλαγή ύψους ή περιεχομένου.
+- live αλλαγή περιεχομένου,
+- grips και δυναμικά bounds,
+- OSNAP στα όρια του text.
 
-Το `size` δεν χρησιμοποιείται πλέον. Παλιά JSON που το περιέχουν
-μετατρέπονται αυτόματα σε `height` και καθαρίζονται κατά την αποθήκευση.
+Τα one-line texts έχουν anchor grip στη θέση justification. Τα multiline texts
+έχουν grips στις γωνίες και στα midpoints του text box.
 
-### Διαστάσεις
+### Διαστάσεις και contours
 
-Οι aligned dimensions εμφανίζουν το μήκος πάνω στη γραμμή διάστασης. Οι angle
-dimensions περιλαμβάνουν:
+Οι aligned dimensions εμφανίζουν το μήκος πάνω στη dimension line. Οι angular
+dimensions εμφανίζουν τόξο, γωνιακή τιμή, Ray1 και Ray2 grips, καθώς και τα
+μήκη των construction rays. Η ιδιότητα Ray2 αλλάζει το μήκος της δεύτερης
+ακτίνας χωρίς να αλλάζει τη διεύθυνσή της.
 
-- γωνιακό τόξο και γωνιακή τιμή,
-- Ray1 και Ray2 grips,
-- μήκος Ray1 και Ray2 πάνω στους νοητούς άξονές τους όταν το αντικείμενο
-  είναι επιλεγμένο,
-- ιδιότητα `Ray2`, η οποία αλλάζει το μήκος της δεύτερης ακτίνας πάνω στη
-  σταθερή διεύθυνσή της.
+Το Generate Contours δημιουργεί γραμμές ισοϋψών από point entities που διαθέτουν
+υψόμετρο.
 
-### JSON και αποθήκευση
+### Title board
 
-Το drawing payload έχει ενδεικτικά τη μορφή:
+Η title board εισάγεται από το [pinakidaA4-1.json](/workspaces/web-cad-engine/pinakidaA4-1.json)
+και προσαρμόζεται στο ενεργό paper size και print scale. Εισάγεται portrait και
+μπορεί να περιστραφεί γύρω από το rotation center της.
 
-```json
-{
-  "entities": [
-    {
-      "type": "text",
-      "x": 10,
-      "y": 20,
-      "text": "Κείμενο",
-      "height": 0.3,
-      "textMode": "one-line",
-      "justify": "middle-center",
-      "fontFamily": "Arial"
-    }
-  ],
-  "angleUnit": "deg",
-  "printScale": 100,
-  "paperSize": "A3-L"
-}
-```
+Τα editable πεδία είναι:
 
-Τα ελληνικά αποθηκεύονται ως κανονικό UTF-8 μέσω `JSON_UNESCAPED_UNICODE`.
-Τα βασικά API actions είναι `save`, `load`, `list`, `rename`, `presence` και
-`export_dxf`.
+`ERGODOTIS`, `ERGO`, `PERIOXI`, `MELETITIS`, `THEMA_SXEDIOU`, `ARSXED`,
+`KLIMAKA`, `XRONOSMELETHS`.
+
+Για κάθε πεδίο υπάρχουν ξεχωριστά:
+
+- περιεχόμενο,
+- ύψος,
+- γραμματοσειρά,
+- one-line/multiline mode,
+- justification,
+- collapsible property section.
+
+Η κατάσταση open/collapsed κάθε πεδίου αποθηκεύεται στο `localStorage` και
+επαναφέρεται όταν ξανανοίγει η palette ή γίνεται reload. Τα πεδία παραμένουν
+child text entities της title board και έτσι ενημερώνονται σε Canvas, αποθήκευση
+και DXF export.
+
+### Paper frame και μονάδες
+
+Το paper frame υποστηρίζει A0, A1, A2, A3 και A4 σε portrait ή landscape.
+Υποστηρίζονται print scales 1:50, 1:100, 1:200, 1:500 και 1:1000.
+
+Οι angular units είναι:
+
+- degrees,
+- grads,
+- radians.
+
+Οι γωνίες αποθηκεύονται εσωτερικά σε radians, ενώ εμφανίζονται σύμφωνα με την
+επιλεγμένη μονάδα.
+
+### Αποθήκευση και συνεργασία
+
+Τα drawing JSON περιέχουν το array `entities` και μπορούν να περιέχουν:
+
+- `angleUnit`,
+- `printScale`,
+- `paperSize`,
+- paper-frame center,
+- camera view state.
+
+Το backend υποστηρίζει τα actions:
+
+- `save`,
+- `load`,
+- `check`,
+- `list`,
+- `rename`,
+- `presence`,
+- `export_dxf`.
+
+Η παρουσία χρηστών αποθηκεύεται στο `cad_presence.json` και χρησιμοποιείται για
+ελαφριά ένδειξη ενεργών χρηστών ανά σχέδιο. Δεν αποτελεί database ή σύστημα
+version control.
 
 ### DXF export
 
-Το export παράγει AC1021/AutoCAD 2007 DXF και περιλαμβάνει:
+Η εξαγωγή παράγει ASCII DXF AutoCAD 2007/AC1021 και περιλαμβάνει:
 
-- LINE, LWPOLYLINE, CIRCLE, ARC και ELLIPSE,
-- POINT και labels,
-- MTEXT με ύψος, rotation και attachment point,
+- LINE,
+- LWPOLYLINE,
+- CIRCLE,
+- ARC,
+- ELLIPSE,
+- POINT,
+- TEXT για one-line text,
+- MTEXT για multiline text,
 - aligned και angular dimensions,
-- HATCH boundary loops,
-- paper frame, title information και north arrow,
-- εισαγόμενα child entities,
-- title board από το `pinakidaA4-1.json`, ορισμένο στο DXF ως πραγματικό
-  `BLOCK` και τοποθετημένο στο τέλος ως `INSERT` reference, με το ίδιο
-  portrait fitting, scale και rotation. Η πινακίδα δεν συμμετέχει στον
-  σχηματισμό των ορίων του σχεδίου/κανάβου.
+- hatch boundaries,
+- paper frame,
+- title information,
+- north arrow,
+- imported child entities.
 
-Το DXF είναι το αρχείο ανταλλαγής. Το JSON παραμένει η κύρια μορφή
-αποθήκευσης του editor.
+Η title board εξάγεται ως πραγματικό DXF `BLOCK` definition και προστίθεται
+στο τέλος ως `INSERT` block reference. Η θέση, η περιστροφή και οι αναλογίες
+της διατηρούνται. Η title board δεν συμμετέχει στον υπολογισμό των ορίων του
+κύριου σχεδίου και του κανάβου.
 
-### Ασφάλεια και περιορισμοί
+Τα ελληνικά text μεταφέρονται με AutoCAD Unicode escape sequences, ώστε το DXF
+να παραμένει ASCII-safe και να μην καταλήγουν σε ερωτηματικά κατά την ανάγνωση.
 
-- Τα filenames περιορίζονται σε γράμματα, αριθμούς, `_` και `-`.
-- Η εφαρμογή είναι file-based και χρειάζεται σωστά filesystem permissions.
-- Το `cad_presence.json` είναι ελαφρύ collaboration state, όχι database.
-- Η γεωμετρία είναι 2D· το `z` χρησιμοποιείται κυρίως για point elevations.
-- Το DXF export εξαρτάται από την υποστήριξη MTEXT/HATCH του importer.
+### Περιορισμοί
+
+- Η εφαρμογή είναι file-based και χρειάζεται δικαιώματα εγγραφής.
+- Η γεωμετρία είναι 2D. Το `z` χρησιμοποιείται κυρίως για point elevations.
+- Η πιστότητα του DXF εξαρτάται από τον importer που θα το ανοίξει.
+- Η title-board template file εξαιρείται από τη λίστα σχεδίων.
 
 ---
 
@@ -211,128 +264,93 @@ dimensions περιλαμβάνουν:
 
 ### Overview
 
-Web CAD Engine is a self-contained browser-based 2D CAD editor. The current
-entry point is [`cad-v10.php`](./cad-v10.php), which carries forward the v9
-editor and its CAD interaction model.
+Web CAD Engine is a self-contained browser-based 2D CAD editor implemented in
+[cad-v11.php](/workspaces/web-cad-engine/cad-v11.php). The single PHP file
+contains the backend API, HTML/CSS interface, Canvas renderer, editing tools,
+properties palette and DXF exporter.
 
-The single PHP file contains the server API, HTML/CSS interface, Canvas
-renderer and client-side JavaScript editor. Drawings are stored as JSON files
-and exported as AutoCAD 2007 (AC1021) ASCII DXF. No database, framework,
-package manager or build step is required.
+Drawings are stored as JSON files. No database, framework, package manager or
+build step is required.
 
 ### Running
 
 Requirements:
 
-- PHP with JSON and filesystem functions.
+- PHP with JSON and filesystem support.
 - A modern browser with Canvas, Fetch API, Clipboard API and `localStorage`.
-- Write permission for the repository directory.
+- Write permission for the application directory.
 
 ```bash
 php -S localhost:8000
 ```
 
-Open:
+Open `http://localhost:8000/cad-v11.php`.
 
-```text
-http://localhost:8000/cad-v10.php
-```
-
-### Architecture
-
-The application has two cooperating layers:
-
-1. **PHP backend**: drawing selection, JSON save/load, revision tracking,
-   drawing listing, rename, presence and DXF generation.
-2. **Canvas frontend**: tools, world/screen transforms, rendering, selection,
-   hit-testing, grips, OSNAP, commands, undo/redo and properties editing.
-
-Geometry is stored in model/world units. Camera zoom is visual only and never
-changes stored geometry.
-
-Scale operates on all selected objects around a snapped base point. The command
-then asks directly for a positive numeric scale factor.
-
-### Tools and shortcuts
+### Editor capabilities
 
 The editor provides Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse,
-Point, Text, Move, Offset, Trim, aligned Dimension, Angle Dimension, Hatch,
-contour generation, title-board insertion, JPG capture and DXF export.
-The title board is loaded from `pinakidaA4-1.json`, fitted to the active paper
-size/orientation and exposes editable `ERGODOTIS`, `ERGO`, `PERIOXI`,
-`MELETITIS`, `THEMA_SXEDIOU`, `ARSXED`, `KLIMAKA`, and `XRONOSMELETHS` fields.
+Point, Text, Move, Scale, Offset, Trim, aligned dimensions, angular dimensions,
+Hatch, contour generation and title-board insertion.
 
-It also provides OSNAP, Grid Snap, Ortho, multi-selection, undo/redo, A0–A4
-paper frames, portrait/landscape layouts, angle units and configurable print
-scales from 1:50 to 1:1000.
-OSNAP modes can be enabled independently through checkboxes in the properties
-palette when OSNAP is toggled.
+Scale operates on multiple selected entities around a snapped base point and
+uses a direct positive numeric scale factor. Geometry is stored in model/world
+units; camera zoom and pan only affect the view.
 
-| Key | Action |
-| --- | --- |
-| `F3` | Toggle OSNAP |
-| `F8` | Toggle Ortho |
-| `M`, `S`, `O`, `T`, `D`, `A`, `H` | Move, Scale, Offset, Trim, Dimension, Angle Dimension, Hatch |
-| `Enter` / right click | Finish an open polyline |
-| `C` | Close a polyline |
-| `Ctrl+A` | Select all |
-| `Ctrl+C` / `Ctrl+V` | Copy / paste |
-| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
-| `Delete` / `Backspace` | Delete |
-| `Escape` | Cancel the active command |
+OSNAP supports Endpoint, Midpoint, Center, Quadrant, Intersection,
+Perpendicular, Tangent and Nearest. Modes are independently configurable and
+the active snap is highlighted near the cursor. Grid Snap and Ortho are also
+available.
 
-### Entity model
+### Text and dimensions
 
-Entities are plain JSON objects. Supported types are `line`, `rect`, `pline`,
-`circle`, `arc`, `ellipse`, `point`, `text`, `dimension` and `dxf-import`.
-Most entities also contain `color` and `width`.
+Text entities support model-space height, one-line/multiline mode, rotation,
+nine justification positions, live editing, grips, text bounds, boundary OSNAP
+and Arial, Arial Narrow, Tahoma, Verdana, Consolas or Courier New.
 
-### Text
+Aligned dimensions display measured length. Angular dimensions display the angle
+arc, value, Ray1/Ray2 grips and construction-ray lengths. Ray2 can be changed
+without changing its direction.
 
-Text entities support real model-space height, paper-scale-based creation,
-one-line/multiline modes, nine AutoCAD-style attachment points, live editing,
-dynamic bounds, active grips, boundary OSNAP and CAD-oriented font choices:
-Arial, Arial Narrow, Tahoma, Verdana, Consolas and Courier New.
+### Title board
 
-One-line text exposes one anchor grip at the justification point. Multiline
-text exposes corner and midpoint boundary grips. Editing content updates the
-canvas, bounds and grips immediately. The legacy `size` property is normalized
-to `height` and removed on save.
+The title board is loaded from [pinakidaA4-1.json](/workspaces/web-cad-engine/pinakidaA4-1.json),
+fitted to the active paper size and print scale, inserted in portrait
+orientation and rotatable around its rotation center.
 
-### Dimensions
+Its editable fields are `ERGODOTIS`, `ERGO`, `PERIOXI`, `MELETITIS`,
+`THEMA_SXEDIOU`, `ARSXED`, `KLIMAKA` and `XRONOSMELETHS`.
 
-Aligned dimensions place their value on the dimension line. Angular dimensions
-show the angle arc and value, expose Ray1/Ray2 grips, and display both ray
-lengths on their construction axes while selected. The `Ray2` property changes
-the second ray length while preserving its direction.
+Every field has independent content, height, font, one-line/multiline mode,
+justification and collapsible properties. The open/collapsed state is persisted
+in `localStorage`. Field settings are stored on the child text entities and are
+used by the Canvas renderer, JSON persistence and DXF export.
 
-### JSON and collaboration
+### Storage and API
 
-Drawing files contain an `entities` array plus optional angle-unit, print-scale,
-paper-size and paper-frame settings. JSON is written with unescaped UTF-8 so
-Greek and other Unicode text remains readable. The backend exposes save, load,
-list, rename, presence and DXF export actions.
+Drawing JSON contains an `entities` array and optional angle-unit, print-scale,
+paper-size, paper-frame and camera settings. The backend exposes `save`, `load`,
+`check`, `list`, `rename`, `presence` and `export_dxf` actions.
+
+Presence information is stored in `cad_presence.json` as lightweight
+per-drawing collaboration state.
 
 ### DXF export
 
-The exporter produces AutoCAD 2007/AC1021 DXF with geometry, MTEXT, attachment
-points, dimensions, hatch boundaries, paper frame, title information, north
-arrow and imported child entities. Title boards are defined as DXF `BLOCK`
-definitions and appended last as `INSERT` references, with their fitted scale
-and rotation, so their geometry and text proportions are preserved without
-affecting drawing/grid extents.
-JSON remains the editor's primary storage format; DXF is the interoperability
-format.
+The exporter produces AutoCAD 2007/AC1021 ASCII DXF with geometry, dimensions,
+hatch boundaries, paper frame, title information, north arrow and imported
+entities. One-line text is exported as `TEXT`; multiline text is exported as
+`MTEXT`.
+
+The title board is defined as a real DXF `BLOCK` and appended as an `INSERT`
+block reference. Its fitted proportions, insertion point and rotation are
+preserved, while it is excluded from the main drawing/grid extents.
+
+Greek text is emitted using AutoCAD Unicode escape sequences so the DXF remains
+ASCII-safe and can be read without replacing Greek characters with question
+marks.
 
 ### Limitations
 
-The application is file-based, requires write permissions, and uses
-`cad_presence.json` for lightweight collaboration state. Geometry is primarily
-2D, with `z` used for point elevations. DXF fidelity depends on the target
-importer's MTEXT and HATCH support.
-
-## Versioning
-
-- `cad-v10.php`: current development entry point.
-- `cad-v9.php`: preceding stable working snapshot.
-- Older `cad-v*.php` files are historical snapshots.
+The application is file-based and requires write permissions. Geometry is
+primarily 2D, with `z` used mainly for point elevations. DXF fidelity depends
+on the target CAD importer.
