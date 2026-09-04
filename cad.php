@@ -2210,6 +2210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <select id="drawing-file-select" title="Select drawing to load" aria-label="Select drawing to load"><option>Loading...</option></select>
         <button id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
         <button id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
+        <button id="btn-insert-board" class="tool-btn" data-tool="board" title="Insert title board as one object" style="background: #1b7f6d; border-color: #2ec4b6; font-weight: 700;">ΠΙΝΑΚΙΔΑ</button>
         <button id="btn-export-dxf" class="icon-btn" title="Export to DXF (2007)" style="background: #e65100; border-color: #f57c00; font-weight: 600;"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M5 19h14"/><path d="M5 7V4h14v3"/></svg><span class="sr-only">Export to DXF (2007)</span></button>
         <span id="save-indicator" style="font-size: 11px; color: #4ec9b0; margin-left: 6px;">● Auto-saved</span>
     </div>
@@ -2692,6 +2693,130 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.querySelectorAll('.tool-btn, .icon-btn').forEach(button => {
             button.classList.toggle('active', button.id === buttonId);
         });
+    }
+
+    function getPaperSizeMm(paperSizeKey = 'A3-L') {
+        const normalized = String(paperSizeKey || 'A3-L').trim().toUpperCase();
+        const match = normalized.match(/^A([0-4])-(P|L)$/);
+        if (!match) {
+            return { widthMm: 297, heightMm: 420 };
+        }
+        const sizes = {
+            4: { widthMm: 210, heightMm: 297 },
+            3: { widthMm: 297, heightMm: 420 },
+            2: { widthMm: 420, heightMm: 594 },
+            1: { widthMm: 594, heightMm: 841 },
+            0: { widthMm: 841, heightMm: 1189 }
+        };
+        const size = sizes[Number(match[1])] || sizes[3];
+        const isPortrait = match[2] === 'P';
+        return isPortrait
+            ? { widthMm: size.widthMm, heightMm: size.heightMm }
+            : { widthMm: size.heightMm, heightMm: size.widthMm };
+    }
+
+    function createTitleBoardTemplate() {
+        const children = [
+            { type: 'rect', x: 8.452539198744034, y: -0.0165407857651303, w: 9.600408342436816, h: 13.347727924689968, color: '#ffffff', width: 2 },
+            { type: 'rect', x: 8.505844805338256, y: 12.27813136607977, w: 9.496571084226388, h: 1.053056772845149, color: '#ffffff', width: 2 },
+            { type: 'rect', x: 8.505844805338256, y: 10.37968408912155, w: 9.496571084226388, h: 1.65380927823944, color: '#ffffff', width: 2 },
+            { type: 'rect', x: 8.505844805338256, y: 7.193450996732792, w: 9.496571084226388, h: 1.686896341093026, color: '#ffffff', width: 2 },
+            { type: 'rect', x: 8.505844805338256, y: 3.949152470783758, w: 9.496571084226388, h: 1.646, color: '#ffffff', width: 2 },
+            { type: 'rect', x: 8.505844805338256, y: 0.0263981917037768, w: 9.496571084226388, h: 3.273759674354095, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 8.505844805338256, y1: 12.27813136607977, x2: 18.00241588956464, y2: 12.27813136607977, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 8.505844805338256, y1: 10.37968408912155, x2: 18.00241588956464, y2: 10.37968408912155, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 8.505844805338256, y1: 7.193450996732792, x2: 18.00241588956464, y2: 7.193450996732792, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 8.505844805338256, y1: 3.949152470783758, x2: 18.00241588956464, y2: 3.949152470783758, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 8.505844805338256, y1: 0.0263981917037768, x2: 18.00241588956464, y2: 0.0263981917037768, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 13.25534333662244, y1: 3.300157866057872, x2: 13.25534333662244, y2: 12.27813136607977, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 15.99895254504668, y1: 4.856547335825268, x2: 15.99895254504668, y2: 12.27813136607977, color: '#ffffff', width: 2 },
+            { type: 'line', x1: 8.505844805338256, y1: 3.300157866057872, x2: 18.00241588956442, y2: 3.300157866057872, color: '#ffffff', width: 2 }
+        ];
+
+        return {
+            type: 'dxf-import',
+            name: 'Πινακίδα',
+            color: '#ffffff',
+            width: 2,
+            children,
+            labels: [
+                { text: 'ergodotis', x: 13.25413034745134, y: 12.77784116131028, color: '#ffffff' },
+                { text: 'ergo', x: 13.25413034745134, y: 11.20656903204116, color: '#ffffff' },
+                { text: 'perioxi', x: 13.25413034745134, y: 9.629138784961185, color: '#ffffff' },
+                { text: 'meletitis', x: 13.25413034745134, y: 8.036889672131394, color: '#ffffff' },
+                { text: 'ΘΕΜΑ ΣΧΕΔΙΟΥ:', x: 9.677211262235459, y: 6.747679067399246, color: '#ffffff' },
+                { text: 'titlos', x: 12.25239867519235, y: 5.72060342434878, color: '#ffffff' },
+                { text: 'arithmos', x: 17.00068421730566, y: 5.906792297517483, color: '#ffffff' },
+                { text: 'ΚΛΙΜΑΚΑ:  ', x: 8.576422853922849, y: 4.396241778399319, color: '#ffffff' },
+                { text: 'ΧΡΟΝΟΣ ΜΕΛΕΤΗΣ:  ', x: 8.576422853922849, y: 3.75270415089667, color: '#ffffff' },
+                { text: 'ΘΕΩΡΗΣΗ', x: 10.92730872052561, y: 3.090799674247534, color: '#ffffff' },
+                { text: 'Ο ΣΥΝΤΑΞΑΣ', x: 15.62994392133805, y: 3.090799674247534, color: '#ffffff' },
+                { text: 'xronos', x: 14.9882533609628, y: 3.752704150896647, color: '#ffffff' },
+                { text: 'klimaka', x: 14.9882533609628, y: 4.396241778399319, color: '#ffffff' }
+            ]
+        };
+    }
+
+    function createBoardAtPoint(anchorPoint) {
+        const template = createTitleBoardTemplate();
+        const templateBounds = getEntityBounds(template);
+        if (!templateBounds) return null;
+
+        const templateWidth = Math.max(templateBounds.maxX - templateBounds.minX, 1e-6);
+        const templateHeight = Math.max(templateBounds.maxY - templateBounds.minY, 1e-6);
+        const paperSize = getPaperSizeMm(paperSizeSelect.value || 'A4-P');
+        const targetWidthMm = paperSize.widthMm;
+        const targetHeightMm = paperSize.heightMm;
+        const scaleX = targetWidthMm / templateWidth;
+        const scaleY = targetHeightMm / templateHeight;
+
+        const remapX = x => (x - templateBounds.minX) * scaleX + anchorPoint.x;
+        const remapY = y => (y - templateBounds.minY) * scaleY + anchorPoint.y;
+
+        const board = JSON.parse(JSON.stringify(template));
+        board.children = (board.children || []).map(child => {
+            const transformed = JSON.parse(JSON.stringify(child));
+            if (transformed.type === 'line') {
+                transformed.x1 = remapX(transformed.x1);
+                transformed.y1 = remapY(transformed.y1);
+                transformed.x2 = remapX(transformed.x2);
+                transformed.y2 = remapY(transformed.y2);
+            } else if (transformed.type === 'rect') {
+                transformed.x = remapX(transformed.x);
+                transformed.y = remapY(transformed.y);
+                transformed.w = transformed.w * scaleX;
+                transformed.h = transformed.h * scaleY;
+            } else if (transformed.type === 'pline' && Array.isArray(transformed.points)) {
+                transformed.points = transformed.points.map(point => ({
+                    x: remapX(point.x),
+                    y: remapY(point.y)
+                }));
+            }
+            return transformed;
+        });
+        board.labels = (board.labels || []).map(label => ({
+            ...label,
+            x: remapX(label.x),
+            y: remapY(label.y)
+        }));
+        return board;
+    }
+
+    function startBoardInsertMode() {
+        if (currentTool === 'board') {
+            currentTool = 'select';
+            setActiveToolbarButton('tool-select');
+            statusMode.innerText = 'MODE: SELECT';
+            canvas.style.cursor = 'default';
+            render();
+            return;
+        }
+        setActiveToolbarButton('btn-insert-board');
+        currentTool = 'board';
+        statusMode.innerText = 'BOARD: CLICK TO PLACE';
+        canvas.style.cursor = 'crosshair';
+        showToast('Click on the canvas to place the title board. Press Esc to cancel.', 'info', 2400);
+        render();
     }
 
     undoButton.addEventListener('click', executeUndo);
@@ -3481,6 +3606,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (ent.hatch && isPointInsideHatch(worldPt, ent)) {
                 return { entity: ent, hatch: ent, segmentIndex: null };
             }
+            if (ent.type === 'dxf-import') {
+                const bounds = getEntityBounds(ent);
+                if (!bounds) continue;
+                const inside = worldPt.x >= bounds.minX && worldPt.x <= bounds.maxX && worldPt.y >= bounds.minY && worldPt.y <= bounds.maxY;
+                if (inside) return { entity: ent, segmentIndex: null };
+                continue;
+            }
             if (ent.type === 'line') {
                 const res = pointToSegmentDistance(worldPt.x, worldPt.y, ent.x1, ent.y1, ent.x2, ent.y2);
                 if (res.dist * camera.zoom <= SELECT_TOLERANCE_PX) return { entity: ent, segmentIndex: null };
@@ -3554,6 +3686,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function getEntityBounds(ent) {
         const points = [];
+        if (ent.type === 'dxf-import') {
+            const childBounds = (ent.children || []).map(getEntityBounds).filter(Boolean);
+            if (!childBounds.length) return null;
+            return {
+                minX: Math.min(...childBounds.map(bound => bound.minX)),
+                minY: Math.min(...childBounds.map(bound => bound.minY)),
+                maxX: Math.max(...childBounds.map(bound => bound.maxX)),
+                maxY: Math.max(...childBounds.map(bound => bound.maxY))
+            };
+        }
         if (ent.type === 'line') {
             points.push({ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 });
         } else if (ent.type === 'rect') {
@@ -3657,6 +3799,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ent.x += offsetX; ent.y += offsetY;
         } else if (ent.type === 'pline') {
             ent.points.forEach(point => { point.x += offsetX; point.y += offsetY; });
+        } else if (ent.type === 'dxf-import') {
+            if (Array.isArray(ent.children)) {
+                ent.children.forEach(child => translateEntity(child, offsetX, offsetY));
+            }
+            if (Array.isArray(ent.labels)) {
+                ent.labels.forEach(label => {
+                    label.x += offsetX;
+                    label.y += offsetY;
+                });
+            }
         } else if (['circle', 'ellipse', 'arc'].includes(ent.type)) {
             ent.cx += offsetX; ent.cy += offsetY;
         } else if (ent.type === 'point') {
@@ -4711,6 +4863,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function drawEntity(ent, isTemp = false) {
         const isSelected = !selectedHatch && (selectedEntities.has(ent) || selectedEntity === ent);
+
+        if (ent.type === 'dxf-import') {
+            const children = Array.isArray(ent.children) ? ent.children : [];
+            children.forEach(child => {
+                const childEntity = { ...child, color: child.color || ent.color || '#fff', width: child.width || ent.width || 2 };
+                drawEntity(childEntity, isTemp);
+            });
+            if (Array.isArray(ent.labels)) {
+                ctx.save();
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = ent.color || '#ffffff';
+                ent.labels.forEach(label => {
+                    const p = worldToScreen(label.x, label.y);
+                    ctx.fillText(label.text, p.x, p.y);
+                });
+                ctx.restore();
+            }
+            if (isSelected && !isTemp) {
+                const bounds = getEntityBounds(ent);
+                if (bounds) {
+                    const min = worldToScreen(bounds.minX, bounds.minY);
+                    const max = worldToScreen(bounds.maxX, bounds.maxY);
+                    ctx.save();
+                    ctx.strokeStyle = '#00bfff';
+                    ctx.setLineDash([6, 3]);
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(min.x, min.y, max.x - min.x, max.y - min.y);
+                    ctx.restore();
+                }
+            }
+            return;
+        }
 
         ctx.save();
         ctx.beginPath();
@@ -6192,6 +6378,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return;
         }
 
+        if (e.button === 0 && currentTool === 'board') {
+            const boardEntity = createBoardAtPoint(mouseWorld);
+            if (!boardEntity) {
+                showToast('Board template could not be created.', 'error', 1800);
+                return;
+            }
+            saveState();
+            entities.push(boardEntity);
+            selectedEntity = boardEntity;
+            selectedEntities = new Set([boardEntity]);
+            selectedSegmentIndex = null;
+            selectedVertexIndex = 0;
+            setActiveToolbarButton('tool-select');
+            currentTool = 'select';
+            statusMode.innerText = 'MODE: SELECT';
+            canvas.style.cursor = 'default';
+            updatePropertiesPalette();
+            render();
+            triggerAutoSave();
+            showToast('Πινακίδα inserted at the selected point.', 'success', 2200);
+            return;
+        }
+
         // Calculate snap at mousedown for initial coordinates when drawing
         if (e.button === 0 && currentTool !== 'select') {
             const exclude = activeGrip ? activeGrip.entity : null;
@@ -6942,6 +7151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     document.getElementById('btn-angle-dimension').addEventListener('click', startAngleDimensionCommand);
     document.getElementById('btn-copy-jpg').addEventListener('click', startImageCapture);
+    document.getElementById('btn-insert-board').addEventListener('click', startBoardInsertMode);
 
     // DXF Export Button Event (Full Payload with Units)
     document.getElementById('btn-export-dxf').addEventListener('click', () => {
@@ -7154,6 +7364,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 showToast('Paste cancelled.', 'info', 1200);
                 return;
             }
+            if (currentTool === 'board') {
+                currentTool = 'select';
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                canvas.style.cursor = 'default';
+                render();
+                showToast('Board insertion cancelled.', 'info', 1200);
+                return;
+            }
             if (activeGrip) {
                 Object.assign(activeGrip.entity, activeGrip.initialState);
                 activeGrip = null;
@@ -7200,6 +7419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     document.querySelectorAll('.tool-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+            if (!btn.dataset.tool || btn.id === 'btn-insert-board') return;
             setActiveToolbarButton(btn.id);
             currentTool = btn.dataset.tool;
             isDrawing = false;

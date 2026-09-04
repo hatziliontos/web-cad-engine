@@ -2154,6 +2154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="tool-arc" class="tool-btn icon-btn" data-tool="arc" title="Arc"><svg viewBox="0 0 24 24"><path d="M4 17a9 9 0 0 1 13-10"/></svg><span class="sr-only">Arc</span></button>
         <button id="tool-ellipse" class="tool-btn icon-btn" data-tool="ellipse" title="Ellipse"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="5"/></svg><span class="sr-only">Ellipse</span></button>
         <button id="tool-point" class="tool-btn icon-btn" data-tool="point" title="Point"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg><span class="sr-only">Point</span></button>
+        <button id="tool-text" class="tool-btn icon-btn" data-tool="text" title="Text"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 18h10M6 6v12M18 6v12M8 10h8"/><path d="M8 14h8"/></svg><span class="sr-only">Text</span></button>
         <button id="btn-generate-contours" class="icon-btn" title="Generate Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate Contours</span></button>
         <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
         <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H4z"/><path d="M8 16V8h8v8H8z"/></svg><span class="sr-only">Offset</span></button>
@@ -2820,6 +2821,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         render();
     }
 
+    function startTextInsertMode() {
+        if (currentTool === 'text') {
+            currentTool = 'select';
+            setActiveToolbarButton('tool-select');
+            statusMode.innerText = 'MODE: SELECT';
+            canvas.style.cursor = 'default';
+            render();
+            return;
+        }
+        setActiveToolbarButton('tool-text');
+        currentTool = 'text';
+        statusMode.innerText = 'TEXT: CLICK TO PLACE';
+        canvas.style.cursor = 'crosshair';
+        showToast('Click on the canvas to place text. Press Esc to cancel.', 'info', 2400);
+        render();
+    }
+
+    function createTextEntityAtPoint(point) {
+        const text = 'TEXT';
+        const height = 0.1;
+        const newEntity = {
+            type: 'text',
+            x: point.x,
+            y: point.y,
+            text,
+            height,
+            size: height,
+            rotation: 0,
+            justify: 'center',
+            color: document.getElementById('strokeColor').value,
+            width: parseInt(document.getElementById('lineWidth').value, 10) || 1
+        };
+        saveState();
+        entities.push(newEntity);
+        selectedEntity = newEntity;
+        selectedEntities = new Set([newEntity]);
+        selectedSegmentIndex = null;
+        selectedVertexIndex = 0;
+        updatePropertiesPalette();
+        render();
+        triggerAutoSave();
+        showToast('Text inserted.', 'success', 1800);
+        return newEntity;
+    }
+
     undoButton.addEventListener('click', executeUndo);
     redoButton.addEventListener('click', executeRedo);
 
@@ -3061,11 +3107,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // OSNAP candidates are computed from the complete current drawing.
     function getSnapCandidates(refPoint, excludeEntity) {
+        const excludeSet = excludeEntity instanceof Set ? excludeEntity
+            : (excludeEntity instanceof Map ? new Set(excludeEntity.keys())
+            : (excludeEntity ? new Set([excludeEntity]) : null));
         const snaps = [];
         const allSegments = [];
 
         entities.forEach(ent => {
-            if (ent === excludeEntity) return;
+            if (excludeSet && excludeSet.has(ent)) return;
 
             const segs = getEntitySegments(ent);
             allSegments.push(...segs);
@@ -3172,6 +3221,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             snaps.push({ x: intersection.x, y: intersection.y, type: 'intersection' });
         });
 
+        const paperFrameRect = getPrintFrameRectWorld();
+        const paperFrameCorners = [
+            { x: paperFrameRect.left, y: paperFrameRect.bottom },
+            { x: paperFrameRect.right, y: paperFrameRect.bottom },
+            { x: paperFrameRect.right, y: paperFrameRect.top },
+            { x: paperFrameRect.left, y: paperFrameRect.top }
+        ];
+        paperFrameCorners.forEach(point => snaps.push({ x: point.x, y: point.y, type: 'endpoint' }));
+        snaps.push(
+            { x: (paperFrameRect.left + paperFrameRect.right) / 2, y: paperFrameRect.bottom, type: 'midpoint' },
+            { x: paperFrameRect.right, y: (paperFrameRect.bottom + paperFrameRect.top) / 2, type: 'midpoint' },
+            { x: (paperFrameRect.left + paperFrameRect.right) / 2, y: paperFrameRect.top, type: 'midpoint' },
+            { x: paperFrameRect.left, y: (paperFrameRect.bottom + paperFrameRect.top) / 2, type: 'midpoint' },
+            { x: (paperFrameRect.left + paperFrameRect.right) / 2, y: (paperFrameRect.bottom + paperFrameRect.top) / 2, type: 'center' }
+        );
         if (refPoint) {
             allSegments.forEach(seg => {
                 const dx = seg.p2.x - seg.p1.x, dy = seg.p2.y - seg.p1.y;
@@ -3302,7 +3366,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         });
 
-        if (!segmentOnly) entities.filter(e => e !== excludeEntity).forEach(e => {
+        const excludeSetForNearest = excludeEntity instanceof Set ? excludeEntity
+            : (excludeEntity instanceof Map ? new Set(excludeEntity.keys())
+            : (excludeEntity ? new Set([excludeEntity]) : null));
+        if (!segmentOnly) entities.filter(e => !excludeSetForNearest || !excludeSetForNearest.has(e)).forEach(e => {
             if (e.type === 'circle') {
                 const angle = Math.atan2(cursorWorld.y - e.cy, cursorWorld.x - e.cx);
                 const nx = e.cx + e.r * Math.cos(angle);
@@ -3438,6 +3505,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 { id: 'mid', type: 'arc_mid', label: 'Mid', color: '#00e5ff', x: pmx, y: pmy }
             ];
         }
+        if (ent.type === 'text') {
+            return [{ id: 'anchor', type: 'move', color: '#00e5ff', x: ent.x, y: ent.y }];
+        }
         if (ent.type === 'point') {
             return [{ id: 'center', type: 'move', x: ent.x, y: ent.y }];
         }
@@ -3559,6 +3629,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else if (grip.id === 'mid') {
                 ent.r = Math.max(0.001, Math.hypot(targetPt.x - ent.cx, targetPt.y - ent.cy));
             }
+        } else if (ent.type === 'text') {
+            ent.x = targetPt.x; ent.y = targetPt.y;
         } else if (ent.type === 'point') {
             ent.x = targetPt.x; ent.y = targetPt.y;
         } else if (ent.type === 'dimension' && ent.kind === 'angle') {
@@ -3646,6 +3718,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const normDist = Math.hypot((worldPt.x - ent.cx) / ent.rx, (worldPt.y - ent.cy) / ent.ry);
                 const approxDistPx = Math.abs(normDist - 1) * Math.min(ent.rx, ent.ry) * camera.zoom;
                 if (approxDistPx <= SELECT_TOLERANCE_PX) return { entity: ent, segmentIndex: null };
+            } else if (ent.type === 'text') {
+                const text = String(ent.text || '');
+                const height = Math.max(0.001, Number(ent.height ?? ent.size ?? 0.1));
+                const fontPx = Math.max(8, height * 700);
+                const textWidth = Math.max(text.length * fontPx * 0.58, fontPx * 2);
+                const textHeightPx = fontPx * 1.2;
+                const justify = ent.justify === 'left' ? 'left' : ent.justify === 'right' ? 'right' : 'center';
+                const anchorScreen = worldToScreen(ent.x, ent.y);
+                const screenX = screenPt.x;
+                const screenY = screenPt.y;
+                const localX = screenX - anchorScreen.x;
+                const localY = screenY - anchorScreen.y;
+                const rotation = ((Number(ent.rotation) || 0) * Math.PI) / 180;
+                const cos = Math.cos(-rotation);
+                const sin = Math.sin(-rotation);
+                const rx = localX * cos - localY * sin;
+                const ry = localX * sin + localY * cos;
+                let minX = -textWidth / 2;
+                let maxX = textWidth / 2;
+                if (justify === 'left') {
+                    minX = 0;
+                    maxX = textWidth;
+                } else if (justify === 'right') {
+                    minX = -textWidth;
+                    maxX = 0;
+                }
+                const minY = -textHeightPx / 2;
+                const maxY = textHeightPx / 2;
+                if (rx >= minX && rx <= maxX && ry >= minY && ry <= maxY) {
+                    return { entity: ent, segmentIndex: null };
+                }
             } else if (ent.type === 'point') {
                 const dist = Math.hypot(worldPt.x - ent.x, worldPt.y - ent.y);
                 if (dist * camera.zoom <= SELECT_TOLERANCE_PX + 4) return { entity: ent, segmentIndex: null };
@@ -3697,7 +3800,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 maxY: Math.max(...childBounds.map(bound => bound.maxY))
             };
         }
-        if (ent.type === 'line') {
+        if (ent.type === 'text') {
+            const text = String(ent.text || '');
+            const height = Math.max(0.001, Number(ent.height ?? ent.size ?? 0.1));
+            const fontPx = Math.max(8, height * 700 * Math.max(0.5, camera.zoom || 1));
+            const textWidth = Math.max(text.length * fontPx * 0.58, fontPx * 2);
+            const textHeight = fontPx * 1.2;
+            const justify = ent.justify === 'left' ? 'left' : ent.justify === 'right' ? 'right' : 'center';
+            let x1 = ent.x;
+            let x2 = ent.x;
+            if (justify === 'left') {
+                x1 = ent.x;
+                x2 = ent.x + textWidth;
+            } else if (justify === 'right') {
+                x1 = ent.x - textWidth;
+                x2 = ent.x;
+            } else {
+                x1 = ent.x - textWidth / 2;
+                x2 = ent.x + textWidth / 2;
+            }
+            points.push(
+                { x: x1, y: ent.y - textHeight / 2 },
+                { x: x2, y: ent.y + textHeight / 2 }
+            );
+        } else if (ent.type === 'line') {
             points.push({ x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 });
         } else if (ent.type === 'rect') {
             points.push(
@@ -3781,15 +3907,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     function isEntityInSelectionBox(ent, start, end) {
         const bounds = getEntityBounds(ent);
         if (!bounds) return false;
-        const minX = Math.min(start.x, end.x);
-        const minY = Math.min(start.y, end.y);
-        const maxX = Math.max(start.x, end.x);
-        const maxY = Math.max(start.y, end.y);
-        if (end.x >= start.x) {
-            return bounds.minX >= minX && bounds.maxX <= maxX &&
-                bounds.minY >= minY && bounds.maxY <= maxY;
-        }
-        return bounds.maxX >= minX && bounds.minX <= maxX && bounds.maxY >= minY && bounds.minY <= maxY;
+
+        const boxMinX = Math.min(start.x, end.x);
+        const boxMinY = Math.min(start.y, end.y);
+        const boxMaxX = Math.max(start.x, end.x);
+        const boxMaxY = Math.max(start.y, end.y);
+
+        return bounds.minX >= boxMinX && bounds.maxX <= boxMaxX &&
+            bounds.minY >= boxMinY && bounds.maxY <= boxMaxY;
     }
 
     function translateEntity(ent, offsetX, offsetY) {
@@ -3812,6 +3937,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else if (['circle', 'ellipse', 'arc'].includes(ent.type)) {
             ent.cx += offsetX; ent.cy += offsetY;
+        } else if (ent.type === 'text') {
+            ent.x += offsetX; ent.y += offsetY;
         } else if (ent.type === 'point') {
             ent.x += offsetX; ent.y += offsetY;
         } else if (ent.type === 'dimension') {
@@ -3915,13 +4042,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             result.x1 += shiftX; result.y1 += shiftY;
             result.x2 += shiftX; result.y2 += shiftY;
         } else if (entity.type === 'rect') {
-            const center = { x: entity.x + entity.w / 2, y: entity.y + entity.h / 2 };
-            const outward = Math.hypot(sidePoint.x - center.x, sidePoint.y - center.y) >= Math.min(Math.abs(entity.w), Math.abs(entity.h)) / 2;
-            const sign = outward ? 1 : -1;
-            const x1 = Math.min(entity.x, entity.x + entity.w) - offset * sign;
-            const y1 = Math.min(entity.y, entity.y + entity.h) - offset * sign;
-            const x2 = Math.max(entity.x, entity.x + entity.w) + offset * sign;
-            const y2 = Math.max(entity.y, entity.y + entity.h) + offset * sign;
+            const minX = Math.min(entity.x, entity.x + entity.w);
+            const maxX = Math.max(entity.x, entity.x + entity.w);
+            const minY = Math.min(entity.y, entity.y + entity.h);
+            const maxY = Math.max(entity.y, entity.y + entity.h);
+            const inside = sidePoint.x >= minX && sidePoint.x <= maxX && sidePoint.y >= minY && sidePoint.y <= maxY;
+            const sign = inside ? -1 : 1;
+            const x1 = minX - offset * sign;
+            const y1 = minY - offset * sign;
+            const x2 = maxX + offset * sign;
+            const y2 = maxY + offset * sign;
             if (x2 <= x1 || y2 <= y1) return null;
             result.x = x1; result.y = y1; result.w = x2 - x1; result.h = y2 - y1;
         } else if (entity.type === 'pline') {
@@ -4001,18 +4131,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return Object.assign(result, style);
     }
 
+    function getRememberedOffsetDistance(defaultValue = 10) {
+        const rawValue = localStorage.getItem('cad_offset_distance');
+        if (rawValue === null || rawValue === undefined || rawValue === '') {
+            return defaultValue;
+        }
+        const parsed = parseStrictFloat(rawValue, NaN);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+    }
+
+    function rememberOffsetDistance(distance) {
+        if (Number.isFinite(distance) && distance > 0) {
+            localStorage.setItem('cad_offset_distance', String(distance));
+        }
+    }
+
     function startOffsetCommand() {
         if (!selectedEntity || selectedEntities.size !== 1) {
             showToast('Select one object to offset.', 'warning', 1800);
             return;
         }
-        const rawDistance = window.prompt('Offset distance:', '10');
+        const rawDistance = window.prompt('Offset distance:', String(getRememberedOffsetDistance(10)));
         if (rawDistance === null) return;
         const distance = parseStrictFloat(rawDistance, NaN);
         if (!Number.isFinite(distance) || distance <= 0) {
             showToast('Offset distance must be greater than zero.', 'error', 1800);
             return;
         }
+        rememberOffsetDistance(distance);
         offsetCommand = { source: selectedEntity, distance };
         setActiveToolbarButton('btn-offset');
         statusMode.innerText = 'OFFSET: SIDE';
@@ -4291,13 +4437,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             showToast('Hatch supports lines, polylines, rectangles, circles and ellipses.', 'warning', 2200);
             return;
         }
-        const rawDistance = window.prompt('Hatch offset distance:', '10');
+        const rawDistance = window.prompt('Hatch offset distance:', String(getRememberedOffsetDistance(10)));
         if (rawDistance === null) return;
         const distance = parseStrictFloat(rawDistance, NaN);
         if (!Number.isFinite(distance) || distance <= 0) {
             showToast('Hatch offset distance must be greater than zero.', 'error', 1800);
             return;
         }
+        rememberOffsetDistance(distance);
         hatchCommand = { entity: selectedEntity, distance };
         setActiveToolbarButton('btn-hatch');
         statusMode.innerText = 'HATCH: SIDE';
@@ -5006,6 +5153,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ctx.arc(c.x, c.y, r, startAngleScreen, endAngleScreen, false);
             ctx.stroke();
         } 
+        else if (ent.type === 'text') {
+            const p = worldToScreen(ent.x, ent.y);
+            const height = Math.max(0.001, Number(ent.height ?? ent.size ?? 0.1));
+            const fontSize = Math.max(8, height * 700 * Math.max(0.5, camera.zoom || 1));
+            const justify = ent.justify === 'left' ? 'left' : ent.justify === 'right' ? 'right' : 'center';
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(((Number(ent.rotation) || 0) * Math.PI) / 180);
+            ctx.font = `${fontSize}px Arial`;
+            ctx.textAlign = justify;
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = isSelected ? '#00bfff' : (ent.color || '#fff');
+            ctx.fillText(ent.text || '', 0, 0);
+            ctx.restore();
+        }
         else if (ent.type === 'point') {
             const p = worldToScreen(ent.x, ent.y);
             ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
@@ -5910,6 +6072,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 `;
             }
+        } else if (selectedEntity.type === 'text') {
+            const safeText = String(selectedEntity.text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const textHeight = Number(selectedEntity.height ?? selectedEntity.size ?? 0.1);
+            const justification = selectedEntity.justify || 'center';
+            html += `
+                <div class="prop-group">
+                    <div class="prop-group-title">Text</div>
+                    <div class="prop-row"><label>Content</label><input type="text" id="prop-text-content" value="${safeText}"></div>
+                    <div class="prop-row"><label>Height (m)</label><input type="text" id="prop-text-height" value="${formatCoord(textHeight)}"></div>
+                    <div class="prop-row"><label>Justification</label>
+                        <select id="prop-text-justify">
+                            <option value="left" ${justification === 'left' ? 'selected' : ''}>Left</option>
+                            <option value="center" ${justification === 'center' || !justification ? 'selected' : ''}>Center</option>
+                            <option value="right" ${justification === 'right' ? 'selected' : ''}>Right</option>
+                        </select>
+                    </div>
+                    <div class="prop-row"><label>Rotation</label><input type="text" id="prop-text-rotation" value="${formatCoord(selectedEntity.rotation || 0)}"></div>
+                    <div class="prop-row"><label>X</label><input type="text" id="prop-text-x" value="${formatCoord(selectedEntity.x)}"></div>
+                    <div class="prop-row"><label>Y</label><input type="text" id="prop-text-y" value="${formatCoord(selectedEntity.y)}"></div>
+                </div>
+            `;
         } else if (selectedEntity.type === 'point') {
             const pointShowText = selectedEntity.showText !== false;
             html += `
@@ -6006,6 +6189,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             });
             const hatchSide = document.getElementById('prop-hatch-side');
             if (hatchSide) hatchSide.addEventListener('change', (e) => updateHatch('sideSign', Number(e.target.value) < 0 ? -1 : 1));
+        }
+
+        if (selectedEntity.type === 'text') {
+            const textContentInput = document.getElementById('prop-text-content');
+            if (textContentInput) textContentInput.addEventListener('change', (e) => {
+                saveState();
+                selectedEntity.text = e.target.value || 'TEXT';
+                updatePropertiesPalette();
+                render();
+                showToast('Text content updated.', 'success', 1500);
+            });
+
+            const textHeightInput = document.getElementById('prop-text-height');
+            if (textHeightInput) textHeightInput.addEventListener('change', (e) => {
+                const value = parseStrictFloat(e.target.value, NaN);
+                if (!Number.isFinite(value) || value <= 0) {
+                    updatePropertiesPalette();
+                    showToast('Text height must be greater than zero.', 'error', 1800);
+                    return;
+                }
+                saveState();
+                selectedEntity.height = value;
+                selectedEntity.size = value;
+                updatePropertiesPalette();
+                render();
+                showToast('Text height updated.', 'success', 1500);
+            });
+
+            const textJustifySelect = document.getElementById('prop-text-justify');
+            if (textJustifySelect) textJustifySelect.addEventListener('change', (e) => {
+                saveState();
+                selectedEntity.justify = e.target.value || 'center';
+                updatePropertiesPalette();
+                render();
+                showToast('Text justification updated.', 'success', 1500);
+            });
+
+            bindInput('prop-text-rotation', value => { selectedEntity.rotation = value; updatePropertiesPalette(); });
+            bindInput('prop-text-x', value => { selectedEntity.x = value; updatePropertiesPalette(); });
+            bindInput('prop-text-y', value => { selectedEntity.y = value; updatePropertiesPalette(); });
         }
 
         if (selectedEntity.type === 'dimension') {
@@ -6358,9 +6581,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             canvas.style.cursor = 'move';
             return;
         }
-        if (e.button === 0 && currentTool === 'select') {
+        if (e.button === 0 && currentTool === 'select' && !moveCommand && !activeGrip) {
             const frameHit = hitTestPrintFrame(mouseScreen.x, mouseScreen.y);
-            if (frameHit.onBorder) {
+            if (frameHit.onBorder && !hitTestEntity(screenToWorld(mouseScreen.x, mouseScreen.y), mouseScreen)) {
                 const frameRect = getPrintFrameRectWorld();
                 paperFrameDrag = {
                     offsetX: screenToWorld(mouseScreen.x, mouseScreen.y).x - (frameRect.left + frameRect.width / 2),
@@ -6380,7 +6603,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (e.button === 0 && currentTool === 'board') {
-            const boardEntity = createBoardAtPoint(mouseWorld);
+            const boardSnap = findBestSnap(mouseScreen.x, mouseScreen.y);
+            const boardPoint = boardSnap ? { x: boardSnap.worldX, y: boardSnap.worldY } : mouseWorld;
+            const boardEntity = createBoardAtPoint(boardPoint);
             if (!boardEntity) {
                 showToast('Board template could not be created.', 'error', 1800);
                 return;
@@ -6399,6 +6624,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             render();
             triggerAutoSave();
             showToast('Πινακίδα inserted at the selected point.', 'success', 2200);
+            return;
+        }
+
+        if (e.button === 0 && currentTool === 'text') {
+            const textSnap = findBestSnap(mouseScreen.x, mouseScreen.y);
+            const textPoint = textSnap ? { x: textSnap.worldX, y: textSnap.worldY } : mouseWorld;
+            const textEntity = createTextEntityAtPoint(textPoint);
+            if (!textEntity) {
+                setActiveToolbarButton('tool-select');
+                currentTool = 'select';
+                statusMode.innerText = 'MODE: SELECT';
+                canvas.style.cursor = 'default';
+                render();
+                return;
+            }
+            setActiveToolbarButton('tool-select');
+            currentTool = 'select';
+            statusMode.innerText = 'MODE: SELECT';
+            canvas.style.cursor = 'default';
+            render();
             return;
         }
 
@@ -6893,7 +7138,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (activeMove) {
             const dragDistance = Math.hypot(sx - activeMove.startScreen.x, sy - activeMove.startScreen.y);
             if (dragDistance < MOVE_DRAG_THRESHOLD_PX) return;
-            const currentWorld = screenToWorld(sx, sy);
+            const moveSnap = findBestSnap(sx, sy, activeMove.initialStates, {});
+            const currentWorld = moveSnap ? { x: moveSnap.worldX, y: moveSnap.worldY } : screenToWorld(sx, sy);
             applyObjectMove(activeMove, currentWorld);
             if (activeMove.changed && !activeMove.saved) {
                 saveState();
@@ -7153,6 +7399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     document.getElementById('btn-angle-dimension').addEventListener('click', startAngleDimensionCommand);
     document.getElementById('btn-copy-jpg').addEventListener('click', startImageCapture);
     document.getElementById('btn-insert-board').addEventListener('click', startBoardInsertMode);
+    document.getElementById('tool-text').addEventListener('click', startTextInsertMode);
 
     // DXF Export Button Event (Full Payload with Units)
     document.getElementById('btn-export-dxf').addEventListener('click', () => {
@@ -7372,6 +7619,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 canvas.style.cursor = 'default';
                 render();
                 showToast('Board insertion cancelled.', 'info', 1200);
+                return;
+            }
+            if (currentTool === 'text') {
+                currentTool = 'select';
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                canvas.style.cursor = 'default';
+                render();
+                showToast('Text insertion cancelled.', 'info', 1200);
                 return;
             }
             if (activeGrip) {
