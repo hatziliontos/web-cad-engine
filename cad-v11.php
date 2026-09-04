@@ -1082,6 +1082,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                     $dxf[] = "71{$nl}5"; $dxf[] = "72{$nl}5";
                 } else {
                     $dxf[] = "50{$nl}" . sprintf('%.1f', (float)($child['rotation'] ?? 0));
+                    $dxf[] = "100{$nl}AcDbText";
                 }
             }
         }
@@ -1438,6 +1439,8 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                     $dxf[] = "41{$nl}" . sprintf('%.4f', $textWidth);
                     $dxf[] = "71{$nl}{$attachment}";
                     $dxf[] = "72{$nl}5";
+                } else {
+                    $dxf[] = "100{$nl}AcDbText";
                 }
             } elseif ($type === 'dimension' && ($ent['kind'] ?? 'distance') !== 'angle') {
                 $dx = (float)$ent['x2'] - (float)$ent['x1'];
