@@ -69,6 +69,10 @@ http://localhost:8000/cad-v10.php
 - Move, Scale, Offset, Trim, aligned Dimension, Angle Dimension και Hatch.
 - Generate Contours από υψομετρικά σημεία.
 - Εισαγωγή ελληνικής πινακίδας ως ομαδοποιημένο object.
+- Η πινακίδα χρησιμοποιεί το πρότυπο `pinakidaA4-1.json`, προσαρμόζεται
+  αυτόματα στο ενεργό μέγεθος/προσανατολισμό χαρτιού και διαθέτει πεδία
+  `ERGODOTIS`, `ERGO`, `PERIOXI`, `MELETITIS`, `THEMA_SXEDIOU`, `ARSXED`,
+  `KLIMAKA`, `XRONOSMELETHS` στην properties palette.
 - Export DXF 2007 και αντιγραφή περιοχής σχεδίου ως JPG.
 - OSNAP, Grid Snap, Ortho, undo/redo και multi-selection.
 - Paper frame A0–A4 σε portrait/landscape.
@@ -250,6 +254,9 @@ then asks directly for a positive numeric scale factor.
 The editor provides Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse,
 Point, Text, Move, Offset, Trim, aligned Dimension, Angle Dimension, Hatch,
 contour generation, title-board insertion, JPG capture and DXF export.
+The title board is loaded from `pinakidaA4-1.json`, fitted to the active paper
+size/orientation and exposes editable `ERGODOTIS`, `ERGO`, `PERIOXI`,
+`MELETITIS`, `THEMA_SXEDIOU`, `ARSXED`, `KLIMAKA`, and `XRONOSMELETHS` fields.
 
 It also provides OSNAP, Grid Snap, Ortho, multi-selection, undo/redo, A0–A4
 paper frames, portrait/landscape layouts, angle units and configurable print

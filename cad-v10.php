@@ -37,6 +37,14 @@ function getDrawingEntityRevision($filePath) {
 
 $dataFile = __DIR__ . '/' . getDrawingFileName($defaultFileName);
 $presenceFile = __DIR__ . '/cad_presence.json';
+$titleBoardTemplateFile = __DIR__ . '/pinakidaA4-1.json';
+$titleBoardTemplate = [];
+if (is_file($titleBoardTemplateFile)) {
+    $decodedTitleBoardTemplate = json_decode(file_get_contents($titleBoardTemplateFile), true);
+    if (is_array($decodedTitleBoardTemplate) && is_array($decodedTitleBoardTemplate['entities'] ?? null)) {
+        $titleBoardTemplate = $decodedTitleBoardTemplate;
+    }
+}
 
 function sanitizeNickname($nickname) {
     $nickname = trim((string)$nickname);
@@ -2335,6 +2343,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const drawingFileSelect = document.getElementById('drawing-file-select');
     const activeUsers = document.getElementById('active-users');
     const apiEndpoint = window.location.pathname;
+    const titleBoardTemplateData = <?php echo json_encode($titleBoardTemplate, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+    const titleBoardFieldNames = ['ERGODOTIS', 'ERGO', 'PERIOXI', 'MELETITIS', 'THEMA_SXEDIOU', 'ARSXED', 'KLIMAKA', 'XRONOSMELETHS'];
     const propertiesResizer = document.getElementById('properties-resizer');
     const propertiesPalette = document.getElementById('properties-palette');
     const toggleProperties = document.getElementById('toggle-properties');
@@ -2836,7 +2846,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : { widthMm: size.heightMm, heightMm: size.widthMm };
     }
 
-    function createTitleBoardTemplate() {
+    function createLegacyTitleBoardTemplate() {
         const children = [
             { type: 'rect', x: 8.452539198744034, y: -0.0165407857651303, w: 9.600408342436816, h: 13.347727924689968, color: '#ffffff', width: 2 },
             { type: 'rect', x: 8.505844805338256, y: 12.27813136607977, w: 9.496571084226388, h: 1.053056772845149, color: '#ffffff', width: 2 },
@@ -2878,6 +2888,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         };
     }
 
+    function createTitleBoardTemplate() {
+        const children = Array.isArray(titleBoardTemplateData.entities)
+            ? JSON.parse(JSON.stringify(titleBoardTemplateData.entities))
+            : [];
+        return {
+            type: 'dxf-import',
+            name: 'Πινακίδα Α4',
+            boardType: 'title-board',
+            color: '#ffffff',
+            width: 1,
+            children,
+            boardFields: Object.fromEntries(titleBoardFieldNames.map(field => [field, '']))
+        };
+    }
+
     function createBoardAtPoint(anchorPoint) {
         const template = createTitleBoardTemplate();
         const templateBounds = getEntityBounds(template);
@@ -2885,11 +2910,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const templateWidth = Math.max(templateBounds.maxX - templateBounds.minX, 1e-6);
         const templateHeight = Math.max(templateBounds.maxY - templateBounds.minY, 1e-6);
-        const paperSize = getPaperSizeMm(paperSizeSelect.value || 'A4-P');
-        const targetWidthMm = paperSize.widthMm;
-        const targetHeightMm = paperSize.heightMm;
-        const scaleX = targetWidthMm / templateWidth;
-        const scaleY = targetHeightMm / templateHeight;
+        const paperGeometry = getPrintFrameGeometry();
+        const scaleX = paperGeometry.frameWidth / templateWidth;
+        const scaleY = paperGeometry.frameHeight / templateHeight;
 
         const remapX = x => (x - templateBounds.minX) * scaleX + anchorPoint.x;
         const remapY = y => (y - templateBounds.minY) * scaleY + anchorPoint.y;
@@ -2912,14 +2935,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     x: remapX(point.x),
                     y: remapY(point.y)
                 }));
+            } else if (transformed.type === 'text') {
+                transformed.x = remapX(transformed.x);
+                transformed.y = remapY(transformed.y);
+                transformed.height = Math.max(0.001, Number(transformed.height || 0.1) * scaleY);
+                if (transformed.textBox) {
+                    transformed.textBox.minX *= scaleX;
+                    transformed.textBox.maxX *= scaleX;
+                    transformed.textBox.minY *= scaleY;
+                    transformed.textBox.maxY *= scaleY;
+                }
             }
             return transformed;
         });
-        board.labels = (board.labels || []).map(label => ({
-            ...label,
-            x: remapX(label.x),
-            y: remapY(label.y)
-        }));
+        board.boardFields = Object.fromEntries(titleBoardFieldNames.map(field => [field, field]));
+        board.children.forEach(child => {
+            if (child.type === 'text' && titleBoardFieldNames.includes(child.text)) {
+                child.boardField = child.text;
+            }
+        });
         return board;
     }
 
@@ -6459,6 +6493,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 `;
             }
+        } else if (selectedEntity.type === 'dxf-import' && selectedEntity.boardType === 'title-board') {
+            const boardFieldValues = Object.fromEntries(titleBoardFieldNames.map(field => [field, '']));
+            (selectedEntity.children || []).forEach(child => {
+                if (child.boardField && titleBoardFieldNames.includes(child.boardField)) {
+                    boardFieldValues[child.boardField] = child.text || '';
+                }
+            });
+            const safeBoardValue = value => String(value || '')
+                .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `
+                <div class="prop-group">
+                    <div class="prop-group-title">Title Board Fields</div>
+                    ${titleBoardFieldNames.map(field => `
+                        <div class="prop-row">
+                            <label>${field}</label>
+                            <input type="text" class="prop-board-field" data-board-field="${field}" value="${safeBoardValue(boardFieldValues[field])}">
+                        </div>
+                    `).join('')}
+                </div>
+            `;
         } else if (selectedEntity.type === 'text') {
             const safeText = String(selectedEntity.text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             const textHeight = Number(selectedEntity.height ?? 0.1);
@@ -6677,6 +6732,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             bindInput('prop-text-rotation', value => { selectedEntity.rotation = value; updatePropertiesPalette(); });
             bindInput('prop-text-x', value => { selectedEntity.x = value; updatePropertiesPalette(); });
             bindInput('prop-text-y', value => { selectedEntity.y = value; updatePropertiesPalette(); });
+        }
+
+        if (selectedEntity.type === 'dxf-import' && selectedEntity.boardType === 'title-board') {
+            document.querySelectorAll('.prop-board-field').forEach(input => {
+                input.addEventListener('input', event => {
+                    const field = event.target.dataset.boardField;
+                    const child = (selectedEntity.children || []).find(item => item.boardField === field);
+                    if (!child) return;
+                    if (!event.target.dataset.snapshotSaved) {
+                        saveState();
+                        event.target.dataset.snapshotSaved = 'true';
+                    }
+                    child.text = event.target.value;
+                    render();
+                    triggerAutoSave();
+                });
+                input.addEventListener('blur', event => {
+                    delete event.target.dataset.snapshotSaved;
+                });
+            });
         }
 
         if (selectedEntity.type === 'dimension') {

@@ -1,0 +1,367 @@
+{
+    "entities": [
+        {
+            "type": "rect",
+            "x": 1580.0671657503192,
+            "y": 2386.146092420732,
+            "w": 19.2,
+            "h": 26.696,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2410.7420924207318,
+            "w": 19,
+            "h": 2,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2406.962092420732,
+            "w": 19,
+            "h": 3.29,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2404.472092420732,
+            "w": 19,
+            "h": 2,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2400.6920924207325,
+            "w": 19,
+            "h": 3.29,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2400.2020924207327,
+            "w": 15,
+            "h": -4.2,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1595.167165750319,
+            "y": 2396.002092420733,
+            "w": 4,
+            "h": 4.199999999999818,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2394.6920924207334,
+            "w": 19,
+            "h": 0.82,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2393.382092420734,
+            "w": 19,
+            "h": 0.82,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1580.167165750319,
+            "y": 2386.2460924207326,
+            "w": 9.5,
+            "h": 6.64600000000155,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "rect",
+            "x": 1589.667165750319,
+            "y": 2386.2460924207326,
+            "w": 9.5,
+            "h": 6.64600000000155,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1584.9080209656006,
+            "y": 2392.880387502836,
+            "text": "ΘΕΩΡΗΣΗ",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "top-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBox": {
+                "minX": -4.75,
+                "minY": -0.47999999999956344,
+                "maxX": 4.75,
+                "maxY": 0
+            },
+            "textBackground": "none",
+            "fontFamily": "Arial"
+        },
+        {
+            "type": "text",
+            "x": 1594.4535111171697,
+            "y": 2392.8694080483456,
+            "text": "Ο ΣΥΝΤΑΞΑΣ",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "top-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1597.1862673978392,
+            "y": 2398.125863167974,
+            "text": "ARSXED",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "middle-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1580.5133613561272,
+            "y": 2395.1044217842837,
+            "text": "ΚΛΙΜΑΚΑ",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "middle-left",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1594.1146133361128,
+            "y": 2395.1027379300567,
+            "text": "KLIMAKA",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "middle-left",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1580.4902541099025,
+            "y": 2399.774246480397,
+            "text": "ΘΕΜΑ ΣΧΕΔΙΟΥ",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "middle-left",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1587.6985730135054,
+            "y": 2397.756918474888,
+            "text": "THEMA_SXEDIOU",
+            "height": 0.4,
+            "textMode": "multiline",
+            "rotation": 0,
+            "justify": "middle-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -7.468592736813207,
+                "minY": -1.7548260541552736,
+                "maxX": 7.468592736813662,
+                "maxY": 1.7548260541552736
+            }
+        },
+        {
+            "type": "text",
+            "x": 1580.505407813879,
+            "y": 2393.757097765968,
+            "text": "ΧΡΟΝΟΣ ΜΕΛΕΤΗΣ",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "middle-left",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1594.0277991884102,
+            "y": 2393.7592440231974,
+            "text": "XRONOSMELETHS",
+            "height": 0.4,
+            "textMode": "one-line",
+            "rotation": 0,
+            "justify": "middle-left",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -1.6658867080418531,
+                "minY": -0.6208661470991501,
+                "maxX": 1.6658867080413984,
+                "maxY": 0
+            }
+        },
+        {
+            "type": "text",
+            "x": 1589.667165750319,
+            "y": 2411.7420924207318,
+            "text": "ERGODOTIS",
+            "height": 0.4,
+            "textMode": "multiline",
+            "rotation": 0,
+            "justify": "middle-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -9.5,
+                "minY": -1,
+                "maxX": 9.5,
+                "maxY": 1
+            }
+        },
+        {
+            "type": "text",
+            "x": 1589.667165750319,
+            "y": 2408.6070924207315,
+            "text": "ERGO",
+            "height": 0.4,
+            "textMode": "multiline",
+            "rotation": 0,
+            "justify": "middle-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -9.5,
+                "minY": -1.644999999999527,
+                "maxX": 9.5,
+                "maxY": 1.6450000000004366
+            }
+        },
+        {
+            "type": "text",
+            "x": 1589.667165750319,
+            "y": 2405.472092420732,
+            "text": "PERIOXI",
+            "height": 0.4,
+            "textMode": "multiline",
+            "rotation": 0,
+            "justify": "middle-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -9.5,
+                "minY": -1,
+                "maxX": 9.5,
+                "maxY": 1
+            }
+        },
+        {
+            "type": "text",
+            "x": 1589.667165750319,
+            "y": 2402.337092420733,
+            "text": "MELETITIS",
+            "height": 0.4,
+            "textMode": "multiline",
+            "rotation": 0,
+            "justify": "middle-center",
+            "color": "#ffffff",
+            "width": 1,
+            "textBackground": "none",
+            "fontFamily": "Consolas",
+            "textBox": {
+                "minX": -9.5,
+                "minY": -1.6450000000004366,
+                "maxX": 9.5,
+                "maxY": 1.644999999999527
+            }
+        }
+    ],
+    "viewCenterX": 1586.9548979376373,
+    "viewCenterY": 2401.168037441737,
+    "viewCenterVersion": 2,
+    "zoom": 40.31268432731611
+}
