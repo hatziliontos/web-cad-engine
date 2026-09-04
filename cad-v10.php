@@ -2466,15 +2466,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return (num * Math.PI) / 180;
     }
 
-    function angleDegreesToUnitValue(degrees) {
-        if (angleUnitsSelect.value === 'grad') return (degrees * 200) / 180;
-        if (angleUnitsSelect.value === 'rad') return (degrees * Math.PI) / 180;
-        return degrees;
+    function angleRadiansToUnitValue(radians) {
+        return azimuthRadToValue(Number(radians) || 0);
     }
 
-    function angleUnitValueToDegrees(value) {
-        const radians = azimuthValueToRad(value);
-        return radians * 180 / Math.PI;
+    function angleUnitValueToRadians(value) {
+        return azimuthValueToRad(value);
     }
 
     function formatAzimuth(dx, dy) {
@@ -2737,6 +2734,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function normalizeTextEntities(items) {
         return items.map(entity => {
+            if (entity.type === 'dxf-import' && entity.boardType === 'title-board') {
+                const normalizedBoard = { ...entity };
+                if (normalizedBoard.rotationUnit !== 'rad') {
+                    normalizedBoard.rotation = (Number(normalizedBoard.rotation) || 0) * Math.PI / 180;
+                    normalizedBoard.rotationUnit = 'rad';
+                }
+                return normalizedBoard;
+            }
             if (entity.type !== 'text') return entity;
             const normalized = { ...entity };
             if (!Number.isFinite(Number(normalized.height)) && Number.isFinite(Number(normalized.size))) {
@@ -2918,6 +2923,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: '#ffffff',
             width: 1,
             rotation: 0,
+            rotationUnit: 'rad',
             children,
             boardFields: Object.fromEntries(titleBoardFieldNames.map(field => [field, '']))
         };
@@ -3673,7 +3679,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 x: (bounds.minX + bounds.maxX) / 2,
                 y: (bounds.minY + bounds.maxY) / 2
             };
-            const angle = Number(ent.rotation || 0) * Math.PI / 180;
+            const angle = Number(ent.rotation || 0);
             const corners = [
                 { x: bounds.minX, y: bounds.minY },
                 { x: bounds.maxX, y: bounds.minY },
@@ -4040,7 +4046,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             x: (localBounds.minX + localBounds.maxX) / 2,
                             y: (localBounds.minY + localBounds.maxY) / 2
                         };
-                        testPoint = rotatePointAround(worldPt, center, -Number(ent.rotation) * Math.PI / 180);
+                        testPoint = rotatePointAround(worldPt, center, -Number(ent.rotation));
                         if (testPoint.x < localBounds.minX || testPoint.x > localBounds.maxX ||
                             testPoint.y < localBounds.minY || testPoint.y > localBounds.maxY) continue;
                         return { entity: ent, segmentIndex: null };
@@ -4171,7 +4177,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 x: (bounds.minX + bounds.maxX) / 2,
                 y: (bounds.minY + bounds.maxY) / 2
             };
-            const angle = Number(ent.rotation) * Math.PI / 180;
+            const angle = Number(ent.rotation);
             const corners = [
                 { x: bounds.minX, y: bounds.minY },
                 { x: bounds.maxX, y: bounds.minY },
@@ -5513,7 +5519,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const screenCenter = worldToScreen(center.x, center.y);
                 ctx.save();
                 ctx.translate(screenCenter.x, screenCenter.y);
-                ctx.rotate(Number(ent.rotation) * Math.PI / 180);
+                ctx.rotate(Number(ent.rotation));
                 ctx.translate(-screenCenter.x, -screenCenter.y);
             }
             const children = Array.isArray(ent.children) ? ent.children : [];
@@ -6652,7 +6658,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             html += `
                 <div class="prop-group">
                     <div class="prop-group-title">Title Board Fields</div>
-                    <div class="prop-row"><label>Rotation (${getAngleUnitLabel()})</label><input type="text" id="prop-board-rotation" value="${formatCoord(angleDegreesToUnitValue(Number(selectedEntity.rotation) || 0))}"></div>
+                    <div class="prop-row"><label>Rotation (${getAngleUnitLabel()})</label><input type="text" id="prop-board-rotation" value="${formatCoord(angleRadiansToUnitValue(Number(selectedEntity.rotation) || 0))}"></div>
                     ${titleBoardFieldNames.map(field => `
                         <div class="prop-row">
                             <label>${field}</label>
@@ -6892,7 +6898,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     return;
                 }
                 saveState();
-                selectedEntity.rotation = angleUnitValueToDegrees(value);
+                selectedEntity.rotation = angleUnitValueToRadians(value);
                 updatePropertiesPalette();
                 render();
                 triggerAutoSave();
