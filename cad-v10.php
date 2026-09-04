@@ -5988,7 +5988,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (activeSnap) {
             // Only exclude an entity if we have an active grip
             const snapToShow = activeSnap;
-            if (currentTool !== 'select' || isDrawing || activeGrip || moveCommand || dimensionCommand || angleDimensionCommand) {
+            if (currentTool !== 'select' || isDrawing || activeGrip || moveCommand || scaleCommand || dimensionCommand || angleDimensionCommand) {
                 drawSnapMarker(snapToShow);
             }
         }
@@ -7614,6 +7614,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             moveCommand.targetPoint = getCommandPoint(sx, sy);
             currentMouse = moveCommand.targetPoint;
             statusCoords.innerText = `X: ${formatCoord(currentMouse.x)} | Y: ${formatCoord(currentMouse.y)}`;
+            render();
+            return;
+        }
+        if (scaleCommand && !scaleCommand.basePoint) {
+            activeSnap = findBestSnap(sx, sy, null, {});
+            currentMouse = activeSnap
+                ? { x: activeSnap.worldX, y: activeSnap.worldY }
+                : screenToWorld(sx, sy);
+            statusCoords.innerText = `X: ${formatCoord(currentMouse.x)} | Y: ${formatCoord(currentMouse.y)}`;
+            canvas.style.cursor = activeSnap ? 'crosshair' : 'default';
             render();
             return;
         }
