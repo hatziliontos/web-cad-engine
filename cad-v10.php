@@ -12,9 +12,14 @@ function sanitizeDrawingFileName($fileName) {
     return substr($fileName, -5) === '.json' ? $fileName : $fileName . '.json';
 }
 
+function isTitleBoardTemplateFile($fileName) {
+    return preg_match('/^pinakidaA4(?:-\d+)?\.json$/i', (string)$fileName) === 1;
+}
+
 function getDrawingFileName($fallback) {
     $requestedName = $_POST['file'] ?? ($_COOKIE['cad_file'] ?? $fallback);
-    return sanitizeDrawingFileName($requestedName) ?? $fallback;
+    $safeName = sanitizeDrawingFileName($requestedName);
+    return $safeName && !isTitleBoardTemplateFile($safeName) ? $safeName : $fallback;
 }
 
 function getDrawingRevision($filePath) {
@@ -1845,6 +1850,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach (glob(__DIR__ . '/*.json') ?: [] as $filePath) {
             $fileName = basename($filePath, '.json');
             if ($fileName === 'cad_presence') {
+                continue;
+            }
+            if (isTitleBoardTemplateFile($fileName . '.json')) {
                 continue;
             }
             if (sanitizeDrawingFileName($fileName . '.json') === $fileName . '.json') {
