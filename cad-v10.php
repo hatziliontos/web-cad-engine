@@ -2898,6 +2898,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             boardType: 'title-board',
             color: '#ffffff',
             width: 1,
+            rotation: 0,
             children,
             boardFields: Object.fromEntries(titleBoardFieldNames.map(field => [field, '']))
         };
@@ -2910,9 +2911,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const templateWidth = Math.max(templateBounds.maxX - templateBounds.minX, 1e-6);
         const templateHeight = Math.max(templateBounds.maxY - templateBounds.minY, 1e-6);
-        const paperGeometry = getPrintFrameGeometry();
-        const scaleX = paperGeometry.frameWidth / templateWidth;
-        const scaleY = paperGeometry.frameHeight / templateHeight;
+        const paperKey = String(paperSizeSelect.value || 'A4-P');
+        const paperBase = paperKey.split('-')[0];
+        const portraitGeometry = getPrintFrameGeometryForPaper(`${paperBase}-P`);
+        const scaleX = portraitGeometry.frameWidth / templateWidth;
+        const scaleY = portraitGeometry.frameHeight / templateHeight;
 
         const remapX = x => (x - templateBounds.minX) * scaleX + anchorPoint.x;
         const remapY = y => (y - templateBounds.minY) * scaleY + anchorPoint.y;
@@ -2954,6 +2957,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 child.boardField = child.text;
             }
         });
+        board.rotationCenter = {
+            x: anchorPoint.x + portraitGeometry.frameWidth / 2,
+            y: anchorPoint.y + portraitGeometry.frameHeight / 2
+        };
         return board;
     }
 
@@ -3961,7 +3968,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (ent.type === 'dxf-import') {
                 const bounds = getEntityBounds(ent);
                 if (!bounds) continue;
-                const inside = worldPt.x >= bounds.minX && worldPt.x <= bounds.maxX && worldPt.y >= bounds.minY && worldPt.y <= bounds.maxY;
+                let testPoint = worldPt;
+                if (Number(ent.rotation) !== 0) {
+                    const childBounds = (ent.children || []).map(getEntityBounds).filter(Boolean);
+                    if (childBounds.length) {
+                        const localBounds = {
+                            minX: Math.min(...childBounds.map(bound => bound.minX)),
+                            minY: Math.min(...childBounds.map(bound => bound.minY)),
+                            maxX: Math.max(...childBounds.map(bound => bound.maxX)),
+                            maxY: Math.max(...childBounds.map(bound => bound.maxY))
+                        };
+                        const center = ent.rotationCenter || {
+                            x: (localBounds.minX + localBounds.maxX) / 2,
+                            y: (localBounds.minY + localBounds.maxY) / 2
+                        };
+                        testPoint = rotatePointAround(worldPt, center, -Number(ent.rotation) * Math.PI / 180);
+                        if (testPoint.x < localBounds.minX || testPoint.x > localBounds.maxX ||
+                            testPoint.y < localBounds.minY || testPoint.y > localBounds.maxY) continue;
+                        return { entity: ent, segmentIndex: null };
+                    }
+                }
+                const inside = testPoint.x >= bounds.minX && testPoint.x <= bounds.maxX && testPoint.y >= bounds.minY && testPoint.y <= bounds.maxY;
                 if (inside) return { entity: ent, segmentIndex: null };
                 continue;
             }
@@ -4059,16 +4086,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return null;
     }
 
+    function rotatePointAround(point, center, angle) {
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const dx = point.x - center.x;
+        const dy = point.y - center.y;
+        return {
+            x: center.x + dx * cos - dy * sin,
+            y: center.y + dx * sin + dy * cos
+        };
+    }
+
     function getEntityBounds(ent) {
         const points = [];
         if (ent.type === 'dxf-import') {
             const childBounds = (ent.children || []).map(getEntityBounds).filter(Boolean);
             if (!childBounds.length) return null;
-            return {
+            const bounds = {
                 minX: Math.min(...childBounds.map(bound => bound.minX)),
                 minY: Math.min(...childBounds.map(bound => bound.minY)),
                 maxX: Math.max(...childBounds.map(bound => bound.maxX)),
                 maxY: Math.max(...childBounds.map(bound => bound.maxY))
+            };
+            if (!ent.rotation) return bounds;
+            const center = ent.rotationCenter || {
+                x: (bounds.minX + bounds.maxX) / 2,
+                y: (bounds.minY + bounds.maxY) / 2
+            };
+            const angle = Number(ent.rotation) * Math.PI / 180;
+            const corners = [
+                { x: bounds.minX, y: bounds.minY },
+                { x: bounds.maxX, y: bounds.minY },
+                { x: bounds.maxX, y: bounds.maxY },
+                { x: bounds.minX, y: bounds.maxY }
+            ].map(point => rotatePointAround(point, center, angle));
+            return {
+                minX: Math.min(...corners.map(point => point.x)),
+                minY: Math.min(...corners.map(point => point.y)),
+                maxX: Math.max(...corners.map(point => point.x)),
+                maxY: Math.max(...corners.map(point => point.y))
             };
         }
         if (ent.type === 'text') {
@@ -4188,6 +4244,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     label.x += offsetX;
                     label.y += offsetY;
                 });
+            }
+            if (ent.rotationCenter) {
+                ent.rotationCenter.x += offsetX;
+                ent.rotationCenter.y += offsetY;
             }
         } else if (['circle', 'ellipse', 'arc'].includes(ent.type)) {
             ent.cx += offsetX; ent.cy += offsetY;
@@ -4335,6 +4395,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const p = scalePoint(label);
                 label.x = p.x; label.y = p.y;
             });
+            if (ent.rotationCenter) {
+                Object.assign(ent.rotationCenter, scalePoint(ent.rotationCenter));
+            }
         }
         if (ent.hatch) {
             ent.hatch.distance = Math.abs((ent.hatch.distance || 0) * factor);
@@ -5056,7 +5119,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     function getPrintFrameGeometry() {
+        return getPrintFrameGeometryForPaper(paperSizeSelect.value || 'A3-L');
+    }
+
+    function getPrintFrameGeometryForPaper(paperKey) {
+        const previousPaperKey = paperSizeSelect.value;
+        paperSizeSelect.value = paperKey;
         const spec = getPrintFrameSpec();
+        paperSizeSelect.value = previousPaperKey;
         const scale = Number(printScaleSelect.value) || 100;
         const frameWidth = (spec.widthMm / 1000) * scale;
         const frameHeight = (spec.heightMm / 1000) * scale;
@@ -5379,6 +5449,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const isSelected = !selectedHatch && (selectedEntities.has(ent) || selectedEntity === ent);
 
         if (ent.type === 'dxf-import') {
+            const hasRotation = Number(ent.rotation) !== 0;
+            if (hasRotation) {
+                const center = ent.rotationCenter || getEntitiesCenter(ent.children || []);
+                const screenCenter = worldToScreen(center.x, center.y);
+                ctx.save();
+                ctx.translate(screenCenter.x, screenCenter.y);
+                ctx.rotate(Number(ent.rotation) * Math.PI / 180);
+                ctx.translate(-screenCenter.x, -screenCenter.y);
+            }
             const children = Array.isArray(ent.children) ? ent.children : [];
             children.forEach(child => {
                 const childEntity = { ...child, color: child.color || ent.color || '#fff', width: child.width || ent.width || 2 };
@@ -5409,6 +5488,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ctx.restore();
                 }
             }
+            if (hasRotation) ctx.restore();
             return;
         }
 
@@ -6495,9 +6575,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } else if (selectedEntity.type === 'dxf-import' && selectedEntity.boardType === 'title-board') {
             const boardFieldValues = Object.fromEntries(titleBoardFieldNames.map(field => [field, '']));
+            const boardFieldHeights = Object.fromEntries(titleBoardFieldNames.map(field => [field, 0.1]));
             (selectedEntity.children || []).forEach(child => {
                 if (child.boardField && titleBoardFieldNames.includes(child.boardField)) {
                     boardFieldValues[child.boardField] = child.text || '';
+                    boardFieldHeights[child.boardField] = Number(child.height) || 0.1;
                 }
             });
             const safeBoardValue = value => String(value || '')
@@ -6506,10 +6588,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             html += `
                 <div class="prop-group">
                     <div class="prop-group-title">Title Board Fields</div>
+                    <div class="prop-row"><label>Rotation (deg)</label><input type="text" id="prop-board-rotation" value="${formatCoord(selectedEntity.rotation || 0)}"></div>
                     ${titleBoardFieldNames.map(field => `
                         <div class="prop-row">
                             <label>${field}</label>
-                            <input type="text" class="prop-board-field" data-board-field="${field}" value="${safeBoardValue(boardFieldValues[field])}">
+                            <input type="text" class="prop-board-field" data-board-field="${field}" data-board-kind="text" value="${safeBoardValue(boardFieldValues[field])}">
+                            <input type="text" class="prop-board-field-height" data-board-field="${field}" value="${formatCoord(boardFieldHeights[field])}" title="${field} height">
                         </div>
                     `).join('')}
                 </div>
@@ -6735,6 +6819,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (selectedEntity.type === 'dxf-import' && selectedEntity.boardType === 'title-board') {
+            bindInput('prop-board-rotation', value => {
+                selectedEntity.rotation = value;
+                updatePropertiesPalette();
+                render();
+                triggerAutoSave();
+            });
             document.querySelectorAll('.prop-board-field').forEach(input => {
                 input.addEventListener('input', event => {
                     const field = event.target.dataset.boardField;
@@ -6750,6 +6840,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 });
                 input.addEventListener('blur', event => {
                     delete event.target.dataset.snapshotSaved;
+                });
+            });
+            document.querySelectorAll('.prop-board-field-height').forEach(input => {
+                input.addEventListener('change', event => {
+                    const field = event.target.dataset.boardField;
+                    const child = (selectedEntity.children || []).find(item => item.boardField === field);
+                    const value = parseStrictFloat(event.target.value, NaN);
+                    if (!child || !Number.isFinite(value) || value <= 0) {
+                        updatePropertiesPalette();
+                        showToast('Text height must be greater than zero.', 'error', 1800);
+                        return;
+                    }
+                    saveState();
+                    child.height = value;
+                    updatePropertiesPalette();
+                    render();
+                    triggerAutoSave();
                 });
             });
         }
