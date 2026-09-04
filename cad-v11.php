@@ -1062,6 +1062,12 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                 $height = max(0.001, (float)($child['height'] ?? $child['size'] ?? 0.1));
                 $text = (string)($child['text'] ?? '');
                 $isMultiline = ($child['textMode'] ?? 'one-line') === 'multiline';
+                $justify = (string)($child['justify'] ?? 'middle-center');
+                $attachment = [
+                    'top-left' => 1, 'top-center' => 2, 'top-right' => 3,
+                    'middle-left' => 4, 'middle-center' => 5, 'middle-right' => 6,
+                    'bottom-left' => 7, 'bottom-center' => 8, 'bottom-right' => 9
+                ][$justify] ?? 5;
                 if (!$isMultiline) $text = preg_replace('/[\r\n]+/', ' ', $text);
                 $entityClass = $isMultiline ? 'AcDbMText' : 'AcDbText';
                 $dxf[] = "0{$nl}" . ($isMultiline ? 'MTEXT' : 'TEXT');
@@ -1071,9 +1077,15 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                 $dxf[] = "40{$nl}" . sprintf('%.4f', $height); $dxf[] = "1{$nl}" . $encodeDxfUnicodeText($text); $dxf[] = "7{$nl}STANDARD";
                 if ($isMultiline) {
                     $dxf[] = "41{$nl}" . sprintf('%.4f', $measureTextWidth($text, $height));
-                    $dxf[] = "71{$nl}5"; $dxf[] = "72{$nl}5";
+                    $dxf[] = "71{$nl}{$attachment}"; $dxf[] = "72{$nl}5";
                 } else {
                     $dxf[] = "50{$nl}" . sprintf('%.1f', (float)($child['rotation'] ?? 0));
+                    $horizontal = in_array($justify, ['top-right', 'middle-right', 'bottom-right'], true) ? 2 : (in_array($justify, ['top-center', 'middle-center', 'bottom-center'], true) ? 1 : 0);
+                    if ($horizontal !== 0) {
+                        $dxf[] = "72{$nl}{$horizontal}";
+                        $dxf[] = "11{$nl}" . sprintf('%.4f', (float)($child['x'] ?? 0) - $center['x']);
+                        $dxf[] = "21{$nl}" . sprintf('%.4f', (float)($child['y'] ?? 0) - $center['y']);
+                    }
                     $dxf[] = "100{$nl}AcDbText";
                 }
             }
@@ -6872,7 +6884,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const child = (selectedEntity.children || []).find(item => item.boardField === field) || {};
                 return [field, {
                     textMode: child.textMode === 'multiline' ? 'multiline' : 'one-line',
-                    fontFamily: ['Arial', 'Arial Narrow', 'Tahoma', 'Verdana', 'Consolas', 'Courier New'].includes(child.fontFamily) ? child.fontFamily : 'Arial'
+                    fontFamily: ['Arial', 'Arial Narrow', 'Tahoma', 'Verdana', 'Consolas', 'Courier New'].includes(child.fontFamily) ? child.fontFamily : 'Arial',
+                    justify: ['top-left', 'top-center', 'top-right', 'middle-left', 'middle-center', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(child.justify) ? child.justify : 'middle-center'
                 }];
             }));
             const boardFieldCollapseState = getTitleBoardFieldCollapseState();
@@ -6894,6 +6907,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="prop-row"><label>Text mode</label><select class="prop-board-field-mode" data-board-field="${field}">
                                 <option value="one-line" ${boardFieldSettings[field].textMode === 'one-line' ? 'selected' : ''}>One line</option>
                                 <option value="multiline" ${boardFieldSettings[field].textMode === 'multiline' ? 'selected' : ''}>Multiline</option>
+                            </select></div>
+                            <div class="prop-row"><label>Justification</label><select class="prop-board-field-justify" data-board-field="${field}">
+                                ${[['top-left', 'Top Left'], ['top-center', 'Top Center'], ['top-right', 'Top Right'], ['middle-left', 'Middle Left'], ['middle-center', 'Middle Center'], ['middle-right', 'Middle Right'], ['bottom-left', 'Bottom Left'], ['bottom-center', 'Bottom Center'], ['bottom-right', 'Bottom Right']].map(([value, label]) => `<option value="${value}" ${value === boardFieldSettings[field].justify ? 'selected' : ''}>${label}</option>`).join('')}
                             </select></div>
                         </details>
                     `).join('')}
@@ -7196,6 +7212,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     child.textMode = event.target.value === 'multiline' ? 'multiline' : 'one-line';
                     if (child.textMode === 'one-line') child.text = String(child.text || '').replace(/[\r\n]+/g, ' ');
                     updatePropertiesPalette();
+                    render();
+                    triggerAutoSave();
+                });
+            });
+            document.querySelectorAll('.prop-board-field-justify').forEach(input => {
+                input.addEventListener('change', event => {
+                    const field = event.target.dataset.boardField;
+                    const child = (selectedEntity.children || []).find(item => item.boardField === field);
+                    if (!child) return;
+                    saveState();
+                    child.justify = event.target.value;
                     render();
                     triggerAutoSave();
                 });
