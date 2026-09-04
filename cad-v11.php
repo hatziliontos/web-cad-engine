@@ -397,9 +397,25 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
         }
         return $text;
     };
-    // The drawing declares ANSI_1253, so emit Greek text in Windows-1253
-    // bytes instead of relying on \U+ escapes that some CAD readers replace.
-    $encodeDxfUnicodeText = $encodeDxfText;
+    $encodeDxfUnicodeText = function(string $text): string {
+        $text = str_replace(["\\", "\r", "\n"], ["\\\\", "", " "], $text);
+        $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
+        if ($chars === false) return $text;
+        $encoded = '';
+        foreach ($chars as $char) {
+            $code = function_exists('mb_ord') ? mb_ord($char, 'UTF-8') : null;
+            if ($code === null && function_exists('iconv')) {
+                $ucs4 = iconv('UTF-8', 'UCS-4BE', $char);
+                if ($ucs4 !== false && strlen($ucs4) === 4) $code = unpack('N', $ucs4)[1];
+            }
+            if ($code === null) {
+                $bytes = unpack('C*', $char);
+                $code = $bytes && count($bytes) === 1 ? $bytes[1] : 63;
+            }
+            $encoded .= ($code >= 32 && $code <= 126) ? $char : sprintf('\\U+%04X', $code);
+        }
+        return $encoded;
+    };
     $measureTextWidth = static function (string $text, float $height): float {
         $chars = function_exists('preg_split') ? preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) : false;
         if ($chars === false) {
