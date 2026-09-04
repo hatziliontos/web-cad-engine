@@ -2804,7 +2804,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let imageCaptureSelection = null;
     let isImageCaptureMode = false;
     let imageCapturePreviousStatus = '';
+    const CLIPBOARD_STORAGE_KEY = 'cad_clipboard_entities';
     let clipboardEntities = [];
+    try {
+        const storedClipboard = localStorage.getItem(CLIPBOARD_STORAGE_KEY);
+        if (storedClipboard) {
+            const parsedClipboard = JSON.parse(storedClipboard);
+            if (Array.isArray(parsedClipboard)) clipboardEntities = parsedClipboard;
+        }
+    } catch (err) {
+        clipboardEntities = [];
+    }
     let activeMove = null;
     let moveCommand = null;
     let scaleCommand = null;
@@ -8556,6 +8566,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && !editingText) {
             if (selectedEntities.size) {
                 clipboardEntities = JSON.parse(JSON.stringify([...selectedEntities]));
+                try {
+                    localStorage.setItem(CLIPBOARD_STORAGE_KEY, JSON.stringify(clipboardEntities));
+                } catch (err) {
+                    // localStorage unavailable or quota exceeded; clipboard still works in-memory for this tab.
+                }
                 e.preventDefault();
                 showToast(`${clipboardEntities.length} object(s) copied.`, 'info', 1500);
             }
@@ -8563,6 +8578,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && !editingText) {
+            try {
+                const storedClipboard = localStorage.getItem(CLIPBOARD_STORAGE_KEY);
+                if (storedClipboard) {
+                    const parsedClipboard = JSON.parse(storedClipboard);
+                    if (Array.isArray(parsedClipboard)) clipboardEntities = parsedClipboard;
+                }
+            } catch (err) {
+                // Fall back to the in-memory clipboard for this tab.
+            }
             if (clipboardEntities.length) {
                 e.preventDefault();
                 pastePreview = {
