@@ -2466,6 +2466,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return (num * Math.PI) / 180;
     }
 
+    function angleDegreesToUnitValue(degrees) {
+        if (angleUnitsSelect.value === 'grad') return (degrees * 200) / 180;
+        if (angleUnitsSelect.value === 'rad') return (degrees * Math.PI) / 180;
+        return degrees;
+    }
+
+    function angleUnitValueToDegrees(value) {
+        const radians = azimuthValueToRad(value);
+        return radians * 180 / Math.PI;
+    }
+
     function formatAzimuth(dx, dy) {
         const aziRad = calculateAzimuthRad(dx, dy);
         const val = azimuthRadToValue(aziRad);
@@ -6641,7 +6652,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             html += `
                 <div class="prop-group">
                     <div class="prop-group-title">Title Board Fields</div>
-                    <div class="prop-row"><label>Rotation (deg)</label><input type="text" id="prop-board-rotation" value="${formatCoord(selectedEntity.rotation || 0)}"></div>
+                    <div class="prop-row"><label>Rotation (${getAngleUnitLabel()})</label><input type="text" id="prop-board-rotation" value="${formatCoord(angleDegreesToUnitValue(Number(selectedEntity.rotation) || 0))}"></div>
                     ${titleBoardFieldNames.map(field => `
                         <div class="prop-row">
                             <label>${field}</label>
@@ -6872,11 +6883,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (selectedEntity.type === 'dxf-import' && selectedEntity.boardType === 'title-board') {
-            bindInput('prop-board-rotation', value => {
-                selectedEntity.rotation = value;
+            const boardRotationInput = document.getElementById('prop-board-rotation');
+            if (boardRotationInput) boardRotationInput.addEventListener('change', event => {
+                const value = parseStrictFloat(event.target.value);
+                if (!Number.isFinite(value)) {
+                    updatePropertiesPalette();
+                    showToast('Rotation must be a number.', 'error', 1800);
+                    return;
+                }
+                saveState();
+                selectedEntity.rotation = angleUnitValueToDegrees(value);
                 updatePropertiesPalette();
                 render();
                 triggerAutoSave();
+                showToast('Title board rotation updated.', 'success', 1500);
             });
             document.querySelectorAll('.prop-board-field').forEach(input => {
                 input.addEventListener('input', event => {
