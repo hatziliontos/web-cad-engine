@@ -350,11 +350,24 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
         }
         return $result;
     };
-    $entities = $flattenEntities(is_array($entities) ? $entities : []);
+    $sourceEntities = is_array($entities) ? $entities : [];
+    $drawingSourceEntities = [];
+    $titleBoardSourceEntities = [];
+    foreach ($sourceEntities as $sourceEntity) {
+        if (($sourceEntity['type'] ?? '') === 'dxf-import' && ($sourceEntity['boardType'] ?? '') === 'title-board') {
+            $titleBoardSourceEntities[] = $sourceEntity;
+        } else {
+            $drawingSourceEntities[] = $sourceEntity;
+        }
+    }
+    $drawingEntities = $flattenEntities($drawingSourceEntities);
+    // Keep the title board last, like a title-block insertion, and exclude it
+    // from all drawing/grid extents.
+    $entities = array_merge($drawingEntities, $flattenEntities($titleBoardSourceEntities));
     $paperSpec = getPaperFrameSpecFromKey($paperSizeKey);
     $paperFrameWidth = ($paperSpec['widthMm'] / 1000) * $scale;
     $paperFrameHeight = ($paperSpec['heightMm'] / 1000) * $scale;
-    $drawingBounds = getDXFGridBounds($entities);
+    $drawingBounds = getDXFGridBounds($drawingEntities);
     if ($drawingBounds) {
         $paperFrameCenterX = ((float)$drawingBounds['minX'] + (float)$drawingBounds['maxX']) / 2;
         $paperFrameCenterY = ((float)$drawingBounds['minY'] + (float)$drawingBounds['maxY']) / 2;
@@ -1461,7 +1474,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
         }
     }
 
-    $gridBounds = getDXFGridBounds($entities);
+    $gridBounds = getDXFGridBounds($drawingEntities);
     if ($gridBounds) {
         $labelHeight = 0.0025 * max(1, (float)$printScale);
         $coordStep = 20.0;

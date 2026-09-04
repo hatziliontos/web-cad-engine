@@ -189,9 +189,9 @@ dimensions περιλαμβάνουν:
 - HATCH boundary loops,
 - paper frame, title information και north arrow,
 - εισαγόμενα child entities,
-- title board από το `pinakidaA4-1.json`, flattened στο DXF με το ίδιο
-  portrait fitting, scale και rotation (η εσωτερική rotation είναι σε radians,
-  ενώ τα DXF text angles γράφονται σε degrees).
+- title board από το `pinakidaA4-1.json`, προστιθέμενο στο τέλος σαν title block
+  και flattened στο DXF με το ίδιο portrait fitting, scale και rotation. Η
+  πινακίδα δεν συμμετέχει στον σχηματισμό των ορίων του σχεδίου/κανάβου.
 
 Το DXF είναι το αρχείο ανταλλαγής. Το JSON παραμένει η κύρια μορφή
 αποθήκευσης του editor.
@@ -316,10 +316,11 @@ list, rename, presence and DXF export actions.
 
 The exporter produces AutoCAD 2007/AC1021 DXF with geometry, MTEXT, attachment
 points, dimensions, hatch boundaries, paper frame, title information, north
-arrow and imported child entities. Title boards are flattened into the DXF
-using their fitted scale and rotation, so their geometry and text proportions
-are preserved. JSON remains the editor's primary storage format; DXF is the
-interoperability format.
+arrow and imported child entities. Title boards are appended last as title
+blocks and flattened using their fitted scale and rotation, so their geometry
+and text proportions are preserved without affecting drawing/grid extents.
+JSON remains the editor's primary storage format; DXF is the interoperability
+format.
 
 ### Limitations
 
