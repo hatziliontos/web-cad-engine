@@ -258,6 +258,99 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
     $pointTextHeight = 0.0025 * $scale;
     $pointMarkerRadius = 0.0015 * $scale;
     $pointTextOffset = $pointTextHeight * 0.9;
+    $transformImportedEntity = null;
+    $transformImportedEntity = static function (array $entity, float $rotation, array $center) use (&$transformImportedEntity): array {
+        $rotate = static function (float $x, float $y) use ($rotation, $center): array {
+            $dx = $x - $center['x'];
+            $dy = $y - $center['y'];
+            $cos = cos($rotation);
+            $sin = sin($rotation);
+            return [
+                'x' => $center['x'] + $dx * $cos - $dy * $sin,
+                'y' => $center['y'] + $dx * $sin + $dy * $cos
+            ];
+        };
+        $type = $entity['type'] ?? '';
+        if ($type === 'dxf-import') {
+            $nestedCenter = is_array($entity['rotationCenter'] ?? null)
+                ? ['x' => (float)$entity['rotationCenter']['x'], 'y' => (float)$entity['rotationCenter']['y']]
+                : $center;
+            $nestedRotation = $rotation + (float)($entity['rotation'] ?? 0);
+            $children = [];
+            foreach (($entity['children'] ?? []) as $child) {
+                $children[] = $transformImportedEntity($child, $nestedRotation, $nestedCenter);
+            }
+            return [
+                'type' => 'dxf-import',
+                'children' => $children,
+                'color' => $entity['color'] ?? '#ffffff',
+                'width' => $entity['width'] ?? 1
+            ];
+        }
+        $result = $entity;
+        if ($type === 'line') {
+            $p1 = $rotate((float)$entity['x1'], (float)$entity['y1']);
+            $p2 = $rotate((float)$entity['x2'], (float)$entity['y2']);
+            $result['x1'] = $p1['x']; $result['y1'] = $p1['y'];
+            $result['x2'] = $p2['x']; $result['y2'] = $p2['y'];
+        } elseif ($type === 'rect') {
+            $corners = [
+                $rotate((float)$entity['x'], (float)$entity['y']),
+                $rotate((float)$entity['x'] + (float)$entity['w'], (float)$entity['y']),
+                $rotate((float)$entity['x'] + (float)$entity['w'], (float)$entity['y'] + (float)$entity['h']),
+                $rotate((float)$entity['x'], (float)$entity['y'] + (float)$entity['h'])
+            ];
+            return [
+                'type' => 'pline',
+                'points' => $corners,
+                'closed' => true,
+                'color' => $entity['color'] ?? '#ffffff',
+                'width' => $entity['width'] ?? 1
+            ];
+        } elseif ($type === 'pline' || $type === 'polygon') {
+            $result['type'] = 'pline';
+            $result['points'] = array_map(static fn($point) => $rotate((float)$point['x'], (float)$point['y']), $entity['points'] ?? []);
+        } elseif (in_array($type, ['circle', 'arc', 'ellipse'], true)) {
+            $centerPoint = $rotate((float)$entity['cx'], (float)$entity['cy']);
+            $result['cx'] = $centerPoint['x'];
+            $result['cy'] = $centerPoint['y'];
+            if ($type === 'arc') {
+                $result['startAzi'] = (float)$entity['startAzi'] + $rotation;
+                $result['endAzi'] = (float)$entity['endAzi'] + $rotation;
+            }
+        } elseif ($type === 'point') {
+            $point = $rotate((float)$entity['x'], (float)$entity['y']);
+            $result['x'] = $point['x']; $result['y'] = $point['y'];
+        } elseif ($type === 'text') {
+            $point = $rotate((float)$entity['x'], (float)$entity['y']);
+            $result['x'] = $point['x']; $result['y'] = $point['y'];
+            $result['rotation'] = (float)($entity['rotation'] ?? 0) + rad2deg($rotation);
+        }
+        return $result;
+    };
+    $flattenEntities = static function (array $source) use ($transformImportedEntity): array {
+        $result = [];
+        foreach ($source as $entity) {
+            if (($entity['type'] ?? '') !== 'dxf-import') {
+                $result[] = $entity;
+                continue;
+            }
+            $children = $entity['children'] ?? [];
+            $bounds = getDXFGridBounds($children);
+            $center = is_array($entity['rotationCenter'] ?? null)
+                ? ['x' => (float)$entity['rotationCenter']['x'], 'y' => (float)$entity['rotationCenter']['y']]
+                : ($bounds ? [
+                    'x' => ((float)$bounds['minX'] + (float)$bounds['maxX']) / 2,
+                    'y' => ((float)$bounds['minY'] + (float)$bounds['maxY']) / 2
+                ] : ['x' => 0.0, 'y' => 0.0]);
+            $rotation = (float)($entity['rotation'] ?? 0);
+            foreach ($children as $child) {
+                $result[] = $transformImportedEntity($child, $rotation, $center);
+            }
+        }
+        return $result;
+    };
+    $entities = $flattenEntities(is_array($entities) ? $entities : []);
     $paperSpec = getPaperFrameSpecFromKey($paperSizeKey);
     $paperFrameWidth = ($paperSpec['widthMm'] / 1000) * $scale;
     $paperFrameHeight = ($paperSpec['heightMm'] / 1000) * $scale;
