@@ -6480,6 +6480,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.getElementById('prop-hatch-side').addEventListener('change', event => updateHatch('sideSign', Number(event.target.value) < 0 ? -1 : 1));
     }
 
+    function getTitleBoardFieldCollapseState() {
+        const defaults = Object.fromEntries(titleBoardFieldNames.map(field => [field, false]));
+        const stored = localStorage.getItem('cad_title_board_field_collapse');
+        if (!stored) return defaults;
+        try {
+            const parsed = JSON.parse(stored);
+            return Object.fromEntries(titleBoardFieldNames.map(field => [field, parsed && parsed[field] === true]));
+        } catch {
+            localStorage.removeItem('cad_title_board_field_collapse');
+            return defaults;
+        }
+    }
+
+    function saveTitleBoardFieldCollapseState(state) {
+        localStorage.setItem('cad_title_board_field_collapse', JSON.stringify(state));
+    }
+
     // The properties panel is rebuilt from the current entity selection and its editable fields.
     function updatePropertiesPalette() {
         let html = `
@@ -6858,6 +6875,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     fontFamily: ['Arial', 'Arial Narrow', 'Tahoma', 'Verdana', 'Consolas', 'Courier New'].includes(child.fontFamily) ? child.fontFamily : 'Arial'
                 }];
             }));
+            const boardFieldCollapseState = getTitleBoardFieldCollapseState();
             const safeBoardValue = value => String(value || '')
                 .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -6866,7 +6884,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="prop-group-title">Title Board Fields</div>
                     <div class="prop-row"><label>Rotation (${getAngleUnitLabel()})</label><input type="text" id="prop-board-rotation" value="${formatCoord(angleRadiansToUnitValue(Number(selectedEntity.rotation) || 0))}"></div>
                     ${titleBoardFieldNames.map(field => `
-                        <details class="prop-board-field-details" ${boardFieldSettings[field].textMode === 'multiline' ? 'open' : ''}>
+                        <details class="prop-board-field-details" data-board-field="${field}" ${boardFieldCollapseState[field] ? 'open' : ''}>
                             <summary>${field}</summary>
                             <div class="prop-row"><label>Content</label><textarea class="prop-board-field" data-board-field="${field}" rows="${boardFieldSettings[field].textMode === 'multiline' ? 3 : 1}">${safeBoardValue(boardFieldValues[field])}</textarea></div>
                             <div class="prop-row"><label>Height</label><input type="text" class="prop-board-field-height" data-board-field="${field}" value="${formatCoord(boardFieldHeights[field])}"></div>
@@ -7102,6 +7120,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (selectedEntity.type === 'dxf-import' && selectedEntity.boardType === 'title-board') {
+            document.querySelectorAll('.prop-board-field-details').forEach(details => {
+                details.addEventListener('toggle', event => {
+                    const state = getTitleBoardFieldCollapseState();
+                    state[event.target.dataset.boardField] = event.target.open;
+                    saveTitleBoardFieldCollapseState(state);
+                });
+            });
             const boardRotationInput = document.getElementById('prop-board-rotation');
             if (boardRotationInput) boardRotationInput.addEventListener('change', event => {
                 const value = parseStrictFloat(event.target.value);
