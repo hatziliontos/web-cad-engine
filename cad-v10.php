@@ -3649,6 +3649,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function getEntityGrips(ent) {
         if (!ent) return [];
+        if (ent.type === 'dxf-import') {
+            const childBounds = (ent.children || []).map(getEntityBounds).filter(Boolean);
+            if (!childBounds.length) return [];
+            const bounds = {
+                minX: Math.min(...childBounds.map(bound => bound.minX)),
+                minY: Math.min(...childBounds.map(bound => bound.minY)),
+                maxX: Math.max(...childBounds.map(bound => bound.maxX)),
+                maxY: Math.max(...childBounds.map(bound => bound.maxY))
+            };
+            const center = ent.rotationCenter || {
+                x: (bounds.minX + bounds.maxX) / 2,
+                y: (bounds.minY + bounds.maxY) / 2
+            };
+            const angle = Number(ent.rotation || 0) * Math.PI / 180;
+            const corners = [
+                { x: bounds.minX, y: bounds.minY },
+                { x: bounds.maxX, y: bounds.minY },
+                { x: bounds.maxX, y: bounds.maxY },
+                { x: bounds.minX, y: bounds.maxY }
+            ].map(point => rotatePointAround(point, center, angle));
+            return corners.map((point, index) => {
+                return {
+                    id: `board-c${index}`,
+                    type: 'board_edge',
+                    color: '#999999',
+                    x: point.x,
+                    y: point.y
+                };
+            }).concat(corners.map((point, index) => {
+                const next = corners[(index + 1) % corners.length];
+                return {
+                    id: `board-m${index}`,
+                    type: 'board_edge',
+                    color: '#999999',
+                    x: (point.x + next.x) / 2,
+                    y: (point.y + next.y) / 2
+                };
+            }));
+        }
         if (ent.type === 'line') {
             return [
                 { id: 'start', type: 'stretch', label: 'P1 (Start)', color: '#4caf50', x: ent.x1, y: ent.y1 },
@@ -5484,19 +5523,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ctx.restore();
             }
             if (isSelected && !isTemp) {
-                const bounds = getEntityBounds(ent);
-                if (bounds) {
-                    const min = worldToScreen(bounds.minX, bounds.minY);
-                    const max = worldToScreen(bounds.maxX, bounds.maxY);
+                const grips = getEntityGrips(ent);
+                if (grips.length >= 8) {
                     ctx.save();
                     ctx.strokeStyle = '#00bfff';
                     ctx.setLineDash([6, 3]);
                     ctx.lineWidth = 1;
-                    ctx.strokeRect(min.x, min.y, max.x - min.x, max.y - min.y);
+                    ctx.beginPath();
+                    grips.slice(0, 4).forEach((grip, index) => {
+                        const point = worldToScreen(grip.x, grip.y);
+                        if (index === 0) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    });
+                    ctx.closePath();
+                    ctx.stroke();
                     ctx.restore();
                 }
             }
             if (hasRotation) ctx.restore();
+            if (!isTemp && isSelected) drawGrips(ent, true);
             return;
         }
 
