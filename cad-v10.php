@@ -2591,7 +2591,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ['tangent', 'Tangent'],
         ['nearest', 'Nearest']
     ];
-    const enabledOsnapTypes = new Set(JSON.parse(localStorage.getItem('cad_osnap_types') || 'null') || osnapTypes.map(([type]) => type));
+    function getStoredOsnapTypes() {
+        const stored = localStorage.getItem('cad_osnap_types');
+        if (!stored) return osnapTypes.map(([type]) => type);
+        try {
+            const parsed = JSON.parse(stored);
+            return Array.isArray(parsed) ? parsed.filter(type => osnapTypes.some(([knownType]) => knownType === type)) : osnapTypes.map(([type]) => type);
+        } catch (error) {
+            console.warn('Ignoring invalid stored OSNAP modes.', error);
+            localStorage.removeItem('cad_osnap_types');
+            return osnapTypes.map(([type]) => type);
+        }
+    }
+    const enabledOsnapTypes = new Set(getStoredOsnapTypes());
 
     function isOsnapTypeEnabled(type) {
         return enabledOsnapTypes.has(type);
@@ -7301,14 +7313,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     triggerAutoSave();
                     showToast('Object(s) moved.', 'success', 1500);
                 }
-                return;
-            }
-            if (scaleCommand) {
-                scaleCommand = null;
-                setActiveToolbarButton('tool-select');
-                statusMode.innerText = 'MODE: SELECT';
-                render();
-                showToast('Scale cancelled.', 'info', 1200);
                 return;
             }
             if (scaleCommand) {
