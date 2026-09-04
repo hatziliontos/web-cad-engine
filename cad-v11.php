@@ -397,33 +397,9 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
         }
         return $text;
     };
-    $encodeDxfUnicodeText = function(string $text): string {
-        $text = str_replace(["\\", "\r", "\n"], ["\\\\", "", " "], $text);
-        $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
-        if ($chars === false) return $text;
-        $encoded = '';
-        foreach ($chars as $char) {
-            $code = null;
-            if (function_exists('mb_ord')) {
-                $code = mb_ord($char, 'UTF-8');
-            } elseif (function_exists('iconv')) {
-                $ucs4 = iconv('UTF-8', 'UCS-4BE', $char);
-                if ($ucs4 !== false && strlen($ucs4) === 4) {
-                    $code = unpack('N', $ucs4)[1];
-                }
-            }
-            if ($code === null) {
-                $bytes = unpack('C*', $char);
-                $code = $bytes && count($bytes) === 1 ? $bytes[1] : 63;
-            }
-            if ($code >= 32 && $code <= 126) {
-                $encoded .= $char;
-            } else {
-                $encoded .= sprintf('\\U+%04X', $code);
-            }
-        }
-        return $encoded;
-    };
+    // The drawing declares ANSI_1253, so emit Greek text in Windows-1253
+    // bytes instead of relying on \U+ escapes that some CAD readers replace.
+    $encodeDxfUnicodeText = $encodeDxfText;
     $measureTextWidth = static function (string $text, float $height): float {
         $chars = function_exists('preg_split') ? preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) : false;
         if ($chars === false) {
@@ -733,7 +709,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
     $dxf[] = "50{$nl}0.0";
     $dxf[] = "71{$nl}0";
     $dxf[] = "42{$nl}0.2";
-    $dxf[] = "3{$nl}txt";
+    $dxf[] = "3{$nl}arial.ttf";
     $dxf[] = "4{$nl}";
     $dxf[] = "0{$nl}ENDTAB";
 
