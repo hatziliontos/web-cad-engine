@@ -1,319 +1,312 @@
-# Web CAD Engine — `cad-v9.php`
+# Web CAD Engine — v10
 
-Το `cad-v9.php` είναι ένας αυτοτελής 2D CAD editor για browser. Ένα μόνο PHP
-αρχείο περιέχει το server-side API, το HTML/CSS περιβάλλον και όλο το
-client-side JavaScript που σχεδιάζει σε HTML5 Canvas. Τα σχέδια αποθηκεύονται
-ως JSON στον ίδιο φάκελο και μπορούν να εξαχθούν σε DXF συμβατό με AutoCAD
-2007.
+Browser-based 2D CAD editor built as a self-contained PHP application. The
+current release is available in [`cad-v10.php`](./cad-v10.php); it preserves
+the complete v9 editor while providing a clean v10 entry point.
 
-## Περιεχόμενα
+## Ελληνικά
 
-- [Εκκίνηση](#εκκίνηση)
-- [Αρχιτεκτονική](#αρχιτεκτονική)
-- [Περιβάλλον εργασίας](#περιβάλλον-εργασίας)
-- [Γεωμετρικά αντικείμενα](#γεωμετρικά-αντικείμενα)
-- [Εντολές και αλληλεπίδραση](#εντολές-και-αλληλεπίδραση)
-- [Hatch και διαστάσεις](#hatch-και-διαστάσεις)
-- [Ισοϋψείς και εισαγωγή σημείων](#ισοϋψείς-και-εισαγωγή-σημείων)
-- [Αποθήκευση και συνεργασία](#αποθήκευση-και-συνεργασία)
-- [Εξαγωγή DXF](#εξαγωγή-dxf)
-- [Μορφή JSON](#μορφή-json)
-- [Δομή κώδικα](#δομή-κώδικα)
-- [Περιορισμοί και ασφάλεια](#περιορισμοί-και-ασφάλεια)
+### Περιγραφή
 
-## Εκκίνηση
+Το Web CAD Engine είναι ένας αυτοτελής 2D CAD editor για browser. Το
+[`cad-v10.php`](./cad-v10.php) περιέχει σε ένα αρχείο:
 
-Απαιτούνται:
+- PHP API για σχέδια, revisions, παρουσία χρηστών και DXF export.
+- HTML/CSS για toolbar, Canvas, properties palette και dialogs.
+- JavaScript engine για σχεδίαση, επιλογή, grips, OSNAP, commands και
+  αποθήκευση.
 
-- PHP με ενεργοποιημένες τις βασικές συναρτήσεις αρχείων και JSON.
-- Σύγχρονος browser με Canvas, Fetch API, Clipboard API και `localStorage`.
-- Δικαίωμα εγγραφής στον φάκελο του repository, επειδή το PHP API γράφει
-  αρχεία σχεδίων και το `cad_presence.json`.
+Τα σχέδια αποθηκεύονται ως JSON στον ίδιο φάκελο και εξάγονται σε ASCII DXF
+συμβατό με AutoCAD 2007 (AC1021). Δεν απαιτείται database, framework,
+dependency manager ή build step.
 
-Από τη ρίζα του repository:
+### Εκκίνηση
+
+Απαιτούνται PHP με JSON/file functions και σύγχρονος browser με Canvas,
+Fetch API, Clipboard API και `localStorage`.
 
 ```bash
 php -S localhost:8000
 ```
 
-Άνοιξε το <http://localhost:8000/cad-v9.php>. Το αρχείο που χρησιμοποιείται για
-το ενεργό σχέδιο είναι αρχικά το `cad_drawing.json`. Η έκδοση έχει σχεδιαστεί
-να λειτουργεί χωρίς database ή build step.
+Άνοιξε:
 
-## Αρχιτεκτονική
+```text
+http://localhost:8000/cad-v10.php
+```
 
-Το αρχείο εκτελείται σε δύο φάσεις:
+Ο server πρέπει να έχει δικαίωμα εγγραφής στον φάκελο, επειδή δημιουργούνται
+και ενημερώνονται drawing JSON και το `cad_presence.json`.
 
-1. **PHP πριν από το HTML**
-   - Επιλέγει το ενεργό JSON drawing από `POST[file]`, cookie ή το
-     `cad_drawing.json`.
-   - Επικυρώνει ονόματα αρχείων και nicknames.
-   - Υλοποιεί αποθήκευση, φόρτωση, έλεγχο revision, μετονομασία, λίστα σχεδίων,
-     παρουσία χρηστών και λήψη DXF.
-   - Παράγει ολόκληρο το ASCII DXF 2007 μέσω της `generateDXF2007()`.
-2. **HTML/CSS/JavaScript**
-   - Δημιουργεί toolbar, Canvas, status bar, properties palette και modal
-     εισαγωγής σημείων.
-   - Κρατά τα entities στη μεταβλητή `entities`, μετατρέπει screen/world
-     coordinates και επανασχεδιάζει με τη `render()`.
-   - Χρησιμοποιεί `fetch()` προς το ίδιο URL για το JSON API και αποθηκεύει
-     ρυθμίσεις εμφάνισης στο `localStorage`.
+### Αρχιτεκτονική
 
-Η σχεδίαση είναι 2D. Οι συντεταγμένες αποθηκεύονται σε world units, ενώ τα
-σημεία μπορούν επιπλέον να έχουν υψόμετρο `z`.
+1. **PHP backend**
+   - Επιλέγει το drawing από `POST[file]`, cookie ή το προεπιλεγμένο αρχείο.
+   - Επικυρώνει filenames και nicknames.
+   - Υλοποιεί save/load, revisions, entity revisions, drawing list και rename.
+   - Διαχειρίζεται collaborative presence.
+   - Παράγει DXF 2007 μέσω `generateDXF2007()`.
+2. **HTML/CSS interface**
+   - Παρέχει toolbar, Canvas, status bar, properties palette και modals.
+3. **JavaScript editor**
+   - Διατηρεί τα entities στη μεταβλητή `entities`.
+   - Μετατρέπει world coordinates σε screen coordinates.
+   - Εκτελεί render, hit-testing, selection, grips, snapping και commands.
+   - Αποθηκεύει τοπικές ρυθμίσεις κάμερας/περιβάλλοντος στο `localStorage`.
 
-## Περιβάλλον εργασίας
+Οι γεωμετρικές συντεταγμένες είναι model/world units. Το zoom επηρεάζει μόνο
+την οθόνη και όχι τις αποθηκευμένες διαστάσεις.
 
-### Toolbar
+### Εργαλεία και πλοήγηση
 
-- **Select**, **Line**, **Polyline**, **Rectangle**, **Circle**, **Arc**,
-  **Ellipse**, **Point**, **Text**.
-- **Generate Contours**, **Move**, **Offset**, **Trim**, aligned
-  **Dimension**, angle **Dimension**, **Copy selection as JPG** και **Hatch**.
-- Μονάδα γωνιών: μοίρες (`deg`), grads (`grad`) ή radians (`rad`).
-- Μέγεθος πλαισίου εκτύπωσης: A0–A4, portrait ή landscape.
-- Κλίμακα DXF: 1:50, 1:100, 1:200, 1:500 ή 1:1000.
-- Χρώμα και πάχος γραμμής.
-- **OSNAP**, **Grid Snap** και **Ortho**.
-- Όνομα drawing, **Save**, **Rename**, επιλογή άλλου drawing, **Undo**,
-  **Redo**, εισαγωγή ελληνικής πινακίδας και **Export to DXF (2007)**.
+Διατίθενται:
 
-Η δεξιά properties palette είναι μεταβαλλόμενου πλάτους και μπορεί να
-συμπτυχθεί. Παρουσιάζει κοινές ιδιότητες (χρώμα και πάχος) και πεδία ειδικά
-για το επιλεγμένο entity. Η θέση της κάμερας, το πλάτος/η σύμπτυξη του panel,
-η μονάδα γωνιών, η κλίμακα, το χαρτί και η θέση του βορρά παραμένουν τοπικά
-στο browser.
+- Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse, Point, Text.
+- Move, Offset, Trim, aligned Dimension, Angle Dimension και Hatch.
+- Generate Contours από υψομετρικά σημεία.
+- Εισαγωγή ελληνικής πινακίδας ως ομαδοποιημένο object.
+- Export DXF 2007 και αντιγραφή περιοχής σχεδίου ως JPG.
+- OSNAP, Grid Snap, Ortho, undo/redo και multi-selection.
+- Paper frame A0–A4 σε portrait/landscape.
+- Angle units: degrees, grads ή radians.
+- Print scales: 1:50, 1:100, 1:200, 1:500 και 1:1000.
 
-### Πλοήγηση και shortcuts
+Βασικές συντομεύσεις:
 
-- Μεσαίο πλήκτρο ή `Alt` + drag: pan.
-- Διπλό middle-click: zoom στα extents.
-- Mouse wheel: zoom γύρω από τον δείκτη.
-- `F3`: ενεργοποίηση/απενεργοποίηση OSNAP.
-- `F8`: ενεργοποίηση/απενεργοποίηση Ortho.
-- `M`, `O`, `T`, `D`, `A`, `H`: Move, Offset, Trim, Dimension, Angle
-  Dimension και Hatch.
-- `Enter` ή δεξί click ολοκληρώνει ανοικτή polyline. `C` την κλείνει.
-- `Ctrl+A`: επιλογή όλων, `Ctrl+C`/`Ctrl+V`: αντιγραφή/τοποθέτηση.
-- `Ctrl+Z` και `Ctrl+Y` (ή `Ctrl+Shift+Z`): Undo/Redo.
-- `Delete` ή `Backspace`: διαγραφή entity ή hatch. `Escape`: ακύρωση
-  ενεργής εντολής.
-
-Το OSNAP αναζητά endpoints, midpoints, centers, quadrants, intersections,
-perpendicular, tangent και nearest σημεία. Το Grid Snap στρογγυλοποιεί σε
-βήμα 10 world units. Το Ortho περιορίζει τη νέα ευθυγράμμιση στον οριζόντιο ή
-κατακόρυφο άξονα.
-
-## Γεωμετρικά αντικείμενα
-
-Τα entities είναι απλά associative JSON objects:
-
-| `type` | Βασικές ιδιότητες | Παρατήρηση |
-| --- | --- | --- |
-| `line` | `x1`, `y1`, `x2`, `y2` | Ευθύγραμμο τμήμα |
-| `rect` | `x`, `y`, `w`, `h` | Ορθογώνιο |
-| `pline` | `points: [{x,y}]`, `closed` | Ανοικτή ή κλειστή polyline |
-| `circle` | `cx`, `cy`, `r` | Κύκλος |
-| `arc` | `cx`, `cy`, `r`, `startAzi`, `endAzi` | Γωνίες σε azimuth radians |
-| `ellipse` | `cx`, `cy`, `rx`, `ry` | Έλλειψη |
-| `point` | `x`, `y`, `z`, `name`, `showText` | Σημείο με υψόμετρο |
-| `text` | `x`, `y`, `text`, `height`, `rotation`, `justify` | Κείμενο |
-| `dimension` | `kind`, γεωμετρικές συντεταγμένες | Απόσταση ή γωνία |
-| `dxf-import` | `children`, `labels` | Ομαδοποιημένη πινακίδα |
-
-Τα περισσότερα σχεδιαζόμενα entities έχουν επίσης `color` και `width`.
-Οι grips επιτρέπουν stretch σε κορυφές/άκρα, αλλαγή radius ή μετακίνηση
-κέντρου. Η properties palette επιτρέπει ακριβέστερη αριθμητική επεξεργασία.
-
-Η **ΠΙΝΑΚΙΔΑ** εισάγει ένα `dxf-import` object με ορθογώνια, γραμμές και labels.
-Το πρότυπο κλιμακώνεται στο επιλεγμένο A-size και τοποθετείται με ένα click.
-Το **Text** εισάγει αρχικά το κείμενο `TEXT`, το οποίο αλλάζει από την palette.
-
-## Εντολές και αλληλεπίδραση
-
-Η κατάσταση του editor περιλαμβάνει active tool, selection set, προσωρινά
-preview entities, grips, snap marker, pan/zoom camera και command objects.
-Οι βασικές εντολές είναι:
-
-- **Move**: μετακινεί ένα ή πολλά επιλεγμένα entities με base/target point.
-- **Offset**: δημιουργεί offset γραμμής, polyline ή καμπύλου αντικειμένου,
-  με απόσταση που θυμάται το `localStorage`.
-- **Trim**: κόβει line, arc ή segment polyline στο επιλεγμένο σημείο.
-- **Dimension**: δημιουργεί aligned distance dimension με offset και
-  παραμετροποιήσιμα δεκαδικά.
-- **Angle Dimension**: δημιουργεί γωνιακή διάσταση με sweep, radius, mode και
-  τιμή σε deg/grad/rad.
-- **Copy/Paste**: αντιγράφει deep-cloned entities και δείχνει preview πριν
-  την τοποθέτηση.
-- **JPG capture**: drag σε περιοχή του Canvas, χωρίς να περιλαμβάνεται το
-  πλαίσιο επιλογής. Αν αποτύχει το clipboard, γίνεται download
-  `cad-selection.jpg`.
-
-Το history αποθηκεύει snapshots του πίνακα entities και επιτρέπει έως 1000
-καταστάσεις (`MAX_HISTORY`). Κάθε αλλαγή ενεργοποιεί debounced auto-save
-με καθυστέρηση 400 ms.
-
-## Hatch και διαστάσεις
-
-Το Hatch εφαρμόζεται σε line, polyline, rectangle, circle ή ellipse. Μετά την
-επιλογή του αντικειμένου ζητά απόσταση offset και click στην πλευρά:
-
-- line/open polyline: left ή right,
-- κλειστό αντικείμενο: inside ή outside.
-
-Το hatch αποθηκεύεται ως `hatch` object με `pattern`, `distance`, `spacing`,
-`angle`, `sideSign`, `color` και `width`. Για polylines υπολογίζεται κοινό
-mitered offset boundary και ξεχωριστές λωρίδες ανά segment, ώστε οι κορυφές να
-μην δημιουργούν επικαλύψεις. Το ίδιο boundary χρησιμοποιείται τόσο στο Canvas
-όσο και στο DXF.
-
-Οι διαστάσεις εμφανίζονται με βοηθητικά markers, κείμενο και wipeout πίσω από
-το label. Η απόσταση υπολογίζεται από τα δύο άκρα, ενώ η γωνιακή διάσταση
-υποστηρίζει αλλαγή mode και επεξεργασία της τιμής από την palette.
-
-## Ισοϋψείς και εισαγωγή σημείων
-
-Το **Generate Contours**:
-
-1. χρησιμοποιεί υπάρχοντα `point` entities ή εισάγει νέα σημεία,
-2. δέχεται `X,Y`, `X,Y,Z`, `P,X,Y` ή `P,X,Y,Z` με comma ή tab,
-3. απαιτεί τουλάχιστον τρία σημεία με έγκυρα X, Y και Z,
-4. δημιουργεί Delaunay triangulation με Bowyer–Watson,
-5. τέμνει κάθε τρίγωνο με στάθμες ανά το ζητούμενο interval,
-6. ενώνει τα τμήματα ανά στάθμη σε polylines και γράφει το υψόμετρο,
-7. αντικαθιστά μόνο entities με `generatedBy: "contours"`.
-
-Το προεπιλεγμένο interval είναι 1 m, αλλά επιτρέπεται οποιαδήποτε θετική
-τιμή. Άκυρες γραμμές εισαγωγής αναφέρονται χωρίς να σταματά η επεξεργασία των
-έγκυρων γραμμών.
-
-## Αποθήκευση και συνεργασία
-
-### JSON API
-
-Όλα τα requests είναι `POST` στο τρέχον pathname και χρησιμοποιούν `action`:
-
-| Action | Είσοδος | Αποτέλεσμα |
-| --- | --- | --- |
-| `save` | `file`, `data` | Γράφει pretty-printed JSON με `LOCK_EX` |
-| `load` | `file` | Επιστρέφει drawing και revisions |
-| `check` | `file` | Επιστρέφει μόνο revisions |
-| `list` | — | Επιστρέφει όλα τα επιτρεπτά `.json` drawings |
-| `rename` | `file`, `newFile` | Μετονομάζει χωρίς overwrite |
-| `presence` | `file`, `clientId`, `nickname` | Ενημερώνει ενεργούς χρήστες |
-| `export_dxf` | `file`, `data`, `printScale` | Κατεβάζει DXF |
-
-Το `revision` αποτελείται από modification time και μέγεθος αρχείου. Το
-`entityRevision` είναι SHA-256 του JSON των entities και χρησιμοποιείται για
-να εντοπίζονται αλλαγές από άλλον client. Ο browser ελέγχει περιοδικά για
-remote changes και φορτώνει τη νεότερη έκδοση όταν δεν υπάρχουν τοπικές
-εκκρεμείς αλλαγές.
-
-Τα drawing names επιτρέπουν μόνο ASCII γράμματα, αριθμούς, `-` και `_`, με
-προαιρετικό `.json`. Το ενεργό όνομα κρατιέται σε HttpOnly cookie. Η παρουσία
-γράφεται με αποκλειστικό file lock και οι χρήστες που δεν έχουν ενημερωθεί για
-15 δευτερόλεπτα αφαιρούνται. Το nickname επιτρέπει Unicode letters/numbers,
-κενά, `-`, `_` και μήκος 1–24 χαρακτήρες· δύο ενεργοί χρήστες δεν μπορούν να
-έχουν το ίδιο nickname στο ίδιο drawing.
-
-### Αποθήκευση στον browser
-
-Το `localStorage` κρατά μόνο ρυθμίσεις client, όπως camera, panel,
-nickname, angle unit, paper size, print scale, offset distance, paper frame και
-north arrow. Τα γεωμετρικά δεδομένα παραμένουν στο JSON αρχείο του server.
-
-## Εξαγωγή DXF
-
-Η `generateDXF2007()` δημιουργεί πλήρες ASCII DXF με:
-
-- `$ACADVER = AC1021` (AutoCAD 2007),
-- metric units, meters, decimal notation και τέσσερα δεκαδικά στις
-  συντεταγμένες,
-- `ANSI_1253` code page και υποστήριξη Unicode labels ως `\U+XXXX`,
-- layer `0`, `STANDARD` text style και `STANDARD` DimStyle,
-- `_ARCHTICK` block για dimension markers,
-- paper frame A0–A4, model/paper space layouts και north arrow,
-- ACI χρώμα 1–9 από το πλησιέστερο HEX χρώμα,
-- `HATCH`, `MTEXT`, `WIPEOUT` και blocks για διαστάσεις όπου απαιτείται.
-
-Η αντιστοίχιση είναι:
-
-| Editor | DXF |
+| Πλήκτρο | Ενέργεια |
 | --- | --- |
-| line | `LINE` |
-| rect | closed `LWPOLYLINE` |
-| pline | `LWPOLYLINE` |
-| circle | `CIRCLE` |
-| arc | `ARC` |
-| ellipse | `ELLIPSE` |
-| point | `POINT` και label `MTEXT` |
-| text | `MTEXT` |
-| distance dimension | block reference/geometry, markers και `MTEXT` |
-| angle dimension | arc, lines και `MTEXT` |
-| hatch | `HATCH` με boundary loops |
-| dxf-import | τα child geometry και labels |
+| `F3` | OSNAP |
+| `F8` | Ortho |
+| `M`, `O`, `T`, `D`, `A`, `H` | Move, Offset, Trim, Dimension, Angle Dimension, Hatch |
+| `Enter` / δεξί click | Ολοκλήρωση polyline |
+| `C` | Κλείσιμο polyline |
+| `Ctrl+A` | Επιλογή όλων |
+| `Ctrl+C` / `Ctrl+V` | Αντιγραφή / επικόλληση |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
+| `Delete` / `Backspace` | Διαγραφή |
+| `Escape` | Ακύρωση εντολής |
 
-Το πλαίσιο χαρτιού κεντράρεται στα drawing bounds όταν υπάρχουν entities.
-Η κλίμακα επηρεάζει το μέγεθος κειμένου και το πλαίσιο. Το DXF κατεβαίνει με
-το βασικό όνομα του ενεργού drawing και κατάληξη `.dxf`.
+Το OSNAP υποστηρίζει endpoints, midpoints, centers, quadrants,
+intersections, perpendicular, tangent και nearest.
 
-## Μορφή JSON
+### Entities
 
-Το ελάχιστο drawing είναι:
+| Type | Κύριες ιδιότητες | Περιγραφή |
+| --- | --- | --- |
+| `line` | `x1`, `y1`, `x2`, `y2` | Γραμμή |
+| `rect` | `x`, `y`, `w`, `h` | Ορθογώνιο |
+| `pline` | `points`, `closed` | Polyline |
+| `circle` | `cx`, `cy`, `r` | Κύκλος |
+| `arc` | `cx`, `cy`, `r`, `startAzi`, `endAzi` | Τόξο με azimuth radians |
+| `ellipse` | `cx`, `cy`, `rx`, `ry` | Έλλειψη |
+| `point` | `x`, `y`, `z`, `name`, `showText` | Σημείο και υψόμετρο |
+| `text` | `x`, `y`, `text`, `height`, `rotation`, `justify`, `textMode`, `textBox`, `fontFamily` | Κείμενο |
+| `dimension` | `kind` και γεωμετρικές ιδιότητες | Απόσταση ή γωνία |
+| `dxf-import` | `children`, `labels` | Εισαγόμενο ομαδοποιημένο σχέδιο |
+
+Τα περισσότερα entities έχουν επίσης `color` και `width`.
+
+### Text entity
+
+Το text υποστηρίζει:
+
+- πραγματικό model-space `height`, ανεξάρτητο από zoom,
+- αρχικό ύψος 3 mm στο χαρτί μέσω της επιλεγμένης print scale,
+- `one-line` και `multiline`,
+- εννέα ACAD attachment points:
+  `top|middle|bottom` × `left|center|right`,
+- συμβατότητα παλιών τιμών `left`, `center`, `right`,
+- CAD-friendly fonts: Arial, Arial Narrow, Tahoma, Verdana, Consolas και
+  Courier New,
+- live ενημέρωση κατά την πληκτρολόγηση,
+- δυναμικό περίγραμμα και hit-testing,
+- one-line anchor grip στη θέση του justification,
+- multiline corners και midpoints grips,
+- OSNAP στα όρια του text,
+- μετακίνηση grips χωρίς αλλαγή ύψους ή περιεχομένου.
+
+Το `size` δεν χρησιμοποιείται πλέον. Παλιά JSON που το περιέχουν
+μετατρέπονται αυτόματα σε `height` και καθαρίζονται κατά την αποθήκευση.
+
+### Διαστάσεις
+
+Οι aligned dimensions εμφανίζουν το μήκος πάνω στη γραμμή διάστασης. Οι angle
+dimensions περιλαμβάνουν:
+
+- γωνιακό τόξο και γωνιακή τιμή,
+- Ray1 και Ray2 grips,
+- μήκος Ray1 και Ray2 πάνω στους νοητούς άξονές τους όταν το αντικείμενο
+  είναι επιλεγμένο,
+- ιδιότητα `Ray2`, η οποία αλλάζει το μήκος της δεύτερης ακτίνας πάνω στη
+  σταθερή διεύθυνσή της.
+
+### JSON και αποθήκευση
+
+Το drawing payload έχει ενδεικτικά τη μορφή:
 
 ```json
 {
   "entities": [
     {
-      "type": "point",
-      "name": "P1",
-      "x": 100,
-      "y": 200,
-      "z": 12.5,
-      "color": "#ffffff",
-      "width": 2
+      "type": "text",
+      "x": 10,
+      "y": 20,
+      "text": "Κείμενο",
+      "height": 0.3,
+      "textMode": "one-line",
+      "justify": "middle-center",
+      "fontFamily": "Arial"
     }
-  ]
+  ],
+  "angleUnit": "deg",
+  "printScale": 100,
+  "paperSize": "A3-L"
 }
 ```
 
-Προαιρετικά metadata όπως `angleUnit`, `paperSize`, `printScale`,
-`paperFrameCenterX` και `paperFrameCenterY` μεταφέρονται στην εξαγωγή DXF.
-Τα renamed drawings είναι ανεξάρτητα `.json` αρχεία στον φάκελο της εφαρμογής.
+Τα ελληνικά αποθηκεύονται ως κανονικό UTF-8 μέσω `JSON_UNESCAPED_UNICODE`.
+Τα βασικά API actions είναι `save`, `load`, `list`, `rename`, `presence` και
+`export_dxf`.
 
-## Δομή κώδικα
+### DXF export
 
-Οι κύριες περιοχές του [cad-v9.php](cad-v9.php) είναι:
+Το export παράγει AC1021/AutoCAD 2007 DXF και περιλαμβάνει:
 
-| Γραμμές | Περιοχή |
+- LINE, LWPOLYLINE, CIRCLE, ARC και ELLIPSE,
+- POINT και labels,
+- MTEXT με ύψος, rotation και attachment point,
+- aligned και angular dimensions,
+- HATCH boundary loops,
+- paper frame, title information και north arrow,
+- εισαγόμενα child entities.
+
+Το DXF είναι το αρχείο ανταλλαγής. Το JSON παραμένει η κύρια μορφή
+αποθήκευσης του editor.
+
+### Ασφάλεια και περιορισμοί
+
+- Τα filenames περιορίζονται σε γράμματα, αριθμούς, `_` και `-`.
+- Η εφαρμογή είναι file-based και χρειάζεται σωστά filesystem permissions.
+- Το `cad_presence.json` είναι ελαφρύ collaboration state, όχι database.
+- Η γεωμετρία είναι 2D· το `z` χρησιμοποιείται κυρίως για point elevations.
+- Το DXF export εξαρτάται από την υποστήριξη MTEXT/HATCH του importer.
+
+---
+
+## English
+
+### Overview
+
+Web CAD Engine is a self-contained browser-based 2D CAD editor. The current
+entry point is [`cad-v10.php`](./cad-v10.php), which carries forward the v9
+editor and its CAD interaction model.
+
+The single PHP file contains the server API, HTML/CSS interface, Canvas
+renderer and client-side JavaScript editor. Drawings are stored as JSON files
+and exported as AutoCAD 2007 (AC1021) ASCII DXF. No database, framework,
+package manager or build step is required.
+
+### Running
+
+Requirements:
+
+- PHP with JSON and filesystem functions.
+- A modern browser with Canvas, Fetch API, Clipboard API and `localStorage`.
+- Write permission for the repository directory.
+
+```bash
+php -S localhost:8000
+```
+
+Open:
+
+```text
+http://localhost:8000/cad-v10.php
+```
+
+### Architecture
+
+The application has two cooperating layers:
+
+1. **PHP backend**: drawing selection, JSON save/load, revision tracking,
+   drawing listing, rename, presence and DXF generation.
+2. **Canvas frontend**: tools, world/screen transforms, rendering, selection,
+   hit-testing, grips, OSNAP, commands, undo/redo and properties editing.
+
+Geometry is stored in model/world units. Camera zoom is visual only and never
+changes stored geometry.
+
+### Tools and shortcuts
+
+The editor provides Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse,
+Point, Text, Move, Offset, Trim, aligned Dimension, Angle Dimension, Hatch,
+contour generation, title-board insertion, JPG capture and DXF export.
+
+It also provides OSNAP, Grid Snap, Ortho, multi-selection, undo/redo, A0–A4
+paper frames, portrait/landscape layouts, angle units and configurable print
+scales from 1:50 to 1:1000.
+
+| Key | Action |
 | --- | --- |
-| 1–239 | filename/presence validation, bounds, paper και hatch helpers |
-| 241–1714 | DXF 2007 generator, tables, blocks και entities |
-| 1715–1867 | POST JSON API και headers για DXF download |
-| 1869–2274 | HTML, CSS, toolbar, Canvas, palette και contour modal |
-| 2275–2633 | client state, αριθμητικά helpers, persistence και presence |
-| 2634–4460 | history, camera, snapping, grips και editing commands |
-| 4461–5633 | hatch geometry, render pipeline και contour generation |
-| 5634–6547 | properties palette και entity-specific editors |
-| 6549–7934 | pointer/keyboard events, import, save/load, sync και startup |
+| `F3` | Toggle OSNAP |
+| `F8` | Toggle Ortho |
+| `M`, `O`, `T`, `D`, `A`, `H` | Move, Offset, Trim, Dimension, Angle Dimension, Hatch |
+| `Enter` / right click | Finish an open polyline |
+| `C` | Close a polyline |
+| `Ctrl+A` | Select all |
+| `Ctrl+C` / `Ctrl+V` | Copy / paste |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| `Delete` / `Backspace` | Delete |
+| `Escape` | Cancel the active command |
 
-## Περιορισμοί και ασφάλεια
+### Entity model
 
-- Δεν υπάρχει authentication, authorization ή ιδιωτικό drawing ανά χρήστη.
-  Όποιος έχει πρόσβαση στον PHP server μπορεί να δει/τροποποιήσει τα JSON.
-- Η συνεργασία είναι file-based και last-write-wins· δεν υπάρχει merge ή
-  database transaction μεταξύ διαφορετικών drawings.
-- Το PHP process πρέπει να μπορεί να γράψει στον φάκελο. Σε production
-  χρειάζονται web-server permissions, HTTPS και κατάλληλοι περιορισμοί πρόσβασης.
-- Η εφαρμογή είναι 2D και ο DXF exporter χειρίζεται το υποσύνολο entities που
-  αναφέρεται παραπάνω. Άγνωστο entity type δεν γράφεται στο DXF.
-- Η εξαγωγή δημιουργείται από το ενεργό POST payload και δεν αποθηκεύει
-  αυτόματα αλλαγές που δεν έχουν ήδη σταλεί με save.
+Entities are plain JSON objects. Supported types are `line`, `rect`, `pline`,
+`circle`, `arc`, `ellipse`, `point`, `text`, `dimension` and `dxf-import`.
+Most entities also contain `color` and `width`.
 
-## English summary
+### Text
 
-`cad-v9.php` is a single-file browser-based 2D CAD editor. It combines a PHP
-JSON/file API, an HTML5 Canvas frontend, entity editing tools, snapping,
-grips, hatching, dimensions, point-based contour generation, collaborative
-presence, JSON persistence and AutoCAD 2007 (`AC1021`) DXF export. See the
-Greek sections above for the complete implementation-oriented description.
+Text entities support real model-space height, paper-scale-based creation,
+one-line/multiline modes, nine AutoCAD-style attachment points, live editing,
+dynamic bounds, active grips, boundary OSNAP and CAD-oriented font choices:
+Arial, Arial Narrow, Tahoma, Verdana, Consolas and Courier New.
+
+One-line text exposes one anchor grip at the justification point. Multiline
+text exposes corner and midpoint boundary grips. Editing content updates the
+canvas, bounds and grips immediately. The legacy `size` property is normalized
+to `height` and removed on save.
+
+### Dimensions
+
+Aligned dimensions place their value on the dimension line. Angular dimensions
+show the angle arc and value, expose Ray1/Ray2 grips, and display both ray
+lengths on their construction axes while selected. The `Ray2` property changes
+the second ray length while preserving its direction.
+
+### JSON and collaboration
+
+Drawing files contain an `entities` array plus optional angle-unit, print-scale,
+paper-size and paper-frame settings. JSON is written with unescaped UTF-8 so
+Greek and other Unicode text remains readable. The backend exposes save, load,
+list, rename, presence and DXF export actions.
+
+### DXF export
+
+The exporter produces AutoCAD 2007/AC1021 DXF with geometry, MTEXT, attachment
+points, dimensions, hatch boundaries, paper frame, title information, north
+arrow and imported child entities. JSON remains the editor's primary storage
+format; DXF is the interoperability format.
+
+### Limitations
+
+The application is file-based, requires write permissions, and uses
+`cad_presence.json` for lightweight collaboration state. Geometry is primarily
+2D, with `z` used for point elevations. DXF fidelity depends on the target
+importer's MTEXT and HATCH support.
+
+## Versioning
+
+- `cad-v10.php`: current development entry point.
+- `cad-v9.php`: preceding stable working snapshot.
+- Older `cad-v*.php` files are historical snapshots.
