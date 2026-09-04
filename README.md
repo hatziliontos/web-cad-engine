@@ -57,12 +57,16 @@ http://localhost:8000/cad-v10.php
 Οι γεωμετρικές συντεταγμένες είναι model/world units. Το zoom επηρεάζει μόνο
 την οθόνη και όχι τις αποθηκευμένες διαστάσεις.
 
+Το Scale εφαρμόζεται στα επιλεγμένα αντικείμενα γύρω από snap base point.
+Μετά το base point ο χρήστης ορίζει reference distance και final distance,
+ώστε ο συντελεστής να υπολογίζεται ως `final / reference`.
+
 ### Εργαλεία και πλοήγηση
 
 Διατίθενται:
 
 - Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse, Point, Text.
-- Move, Offset, Trim, aligned Dimension, Angle Dimension και Hatch.
+- Move, Scale, Offset, Trim, aligned Dimension, Angle Dimension και Hatch.
 - Generate Contours από υψομετρικά σημεία.
 - Εισαγωγή ελληνικής πινακίδας ως ομαδοποιημένο object.
 - Export DXF 2007 και αντιγραφή περιοχής σχεδίου ως JPG.
@@ -77,7 +81,7 @@ http://localhost:8000/cad-v10.php
 | --- | --- |
 | `F3` | OSNAP |
 | `F8` | Ortho |
-| `M`, `O`, `T`, `D`, `A`, `H` | Move, Offset, Trim, Dimension, Angle Dimension, Hatch |
+| `M`, `S`, `O`, `T`, `D`, `A`, `H` | Move, Scale, Offset, Trim, Dimension, Angle Dimension, Hatch |
 | `Enter` / δεξί click | Ολοκλήρωση polyline |
 | `C` | Κλείσιμο polyline |
 | `Ctrl+A` | Επιλογή όλων |
@@ -87,7 +91,9 @@ http://localhost:8000/cad-v10.php
 | `Escape` | Ακύρωση εντολής |
 
 Το OSNAP υποστηρίζει endpoints, midpoints, centers, quadrants,
-intersections, perpendicular, tangent και nearest.
+intersections, perpendicular, tangent και nearest. Οι ίδιοι τύποι εμφανίζονται
+ως checkbox στην properties palette όταν ενεργοποιείται το OSNAP και μπορούν
+να ενεργοποιούνται ανεξάρτητα.
 
 ### Entities
 
@@ -236,6 +242,10 @@ The application has two cooperating layers:
 Geometry is stored in model/world units. Camera zoom is visual only and never
 changes stored geometry.
 
+Scale operates on all selected objects around a snapped base point. The command
+then asks for a reference distance and a final distance; the factor is computed
+as `final / reference`.
+
 ### Tools and shortcuts
 
 The editor provides Select, Line, Polyline, Rectangle, Circle, Arc, Ellipse,
@@ -245,12 +255,14 @@ contour generation, title-board insertion, JPG capture and DXF export.
 It also provides OSNAP, Grid Snap, Ortho, multi-selection, undo/redo, A0–A4
 paper frames, portrait/landscape layouts, angle units and configurable print
 scales from 1:50 to 1:1000.
+OSNAP modes can be enabled independently through checkboxes in the properties
+palette when OSNAP is toggled.
 
 | Key | Action |
 | --- | --- |
 | `F3` | Toggle OSNAP |
 | `F8` | Toggle Ortho |
-| `M`, `O`, `T`, `D`, `A`, `H` | Move, Offset, Trim, Dimension, Angle Dimension, Hatch |
+| `M`, `S`, `O`, `T`, `D`, `A`, `H` | Move, Scale, Offset, Trim, Dimension, Angle Dimension, Hatch |
 | `Enter` / right click | Finish an open polyline |
 | `C` | Close a polyline |
 | `Ctrl+A` | Select all |

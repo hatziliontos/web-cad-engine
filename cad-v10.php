@@ -2195,6 +2195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="tool-text" class="tool-btn icon-btn" data-tool="text" title="Text"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 18h10M6 6v12M18 6v12M8 10h8"/><path d="M8 14h8"/></svg><span class="sr-only">Text</span></button>
         <button id="btn-generate-contours" class="icon-btn" title="Generate Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate Contours</span></button>
         <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
+        <button id="btn-scale" class="icon-btn" title="Scale selected objects (S)"><svg viewBox="0 0 24 24"><path d="M5 19L19 5M8 5h11v11"/><path d="M5 19h11V8"/></svg><span class="sr-only">Scale</span></button>
         <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H4z"/><path d="M8 16V8h8v8H8z"/></svg><span class="sr-only">Offset</span></button>
         <button id="btn-trim" class="icon-btn" title="Trim selected object (T)"><svg viewBox="0 0 24 24"><path d="M5 17L17 5"/><path d="M8 9l2 2M14 15l3 3"/><path d="M4 12h4M16 12h4"/><circle cx="17" cy="5" r="2"/><circle cx="5" cy="17" r="2"/></svg><span class="sr-only">Trim</span></button>
         <button id="btn-dimension" class="icon-btn" title="Aligned dimension (D)"><svg viewBox="0 0 24 24"><path d="M6 17L18 9M6 17l4-1M6 17l2-3M18 9l-4 1M18 9l-2 3"/><path d="M4 20l3-5M17 9l3-5"/></svg><span class="sr-only">Aligned dimension</span></button>
@@ -2572,6 +2573,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let clipboardEntities = [];
     let activeMove = null;
     let moveCommand = null;
+    let scaleCommand = null;
     let offsetCommand = null;
     let trimCommand = null;
     let dimensionCommand = null;
@@ -2579,6 +2581,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let hatchCommand = null;
     let lastMiddleClickTime = 0;
     let pastePreview = null;
+    const osnapTypes = [
+        ['endpoint', 'Endpoint'],
+        ['midpoint', 'Midpoint'],
+        ['center', 'Center'],
+        ['quadrant', 'Quadrant'],
+        ['intersection', 'Intersection'],
+        ['perpendicular', 'Perpendicular'],
+        ['tangent', 'Tangent'],
+        ['nearest', 'Nearest']
+    ];
+    const enabledOsnapTypes = new Set(JSON.parse(localStorage.getItem('cad_osnap_types') || 'null') || osnapTypes.map(([type]) => type));
+
+    function isOsnapTypeEnabled(type) {
+        return enabledOsnapTypes.has(type);
+    }
+
+    function renderOsnapProperties() {
+        const checked = type => isOsnapTypeEnabled(type) ? ' checked' : '';
+        const isOpen = localStorage.getItem('cad_osnap_modes_open') === 'true';
+        return `
+            <details class="prop-group" id="osnap-modes-group"${isOpen ? ' open' : ''}>
+                <summary class="prop-group-title" style="cursor: pointer;">OSNAP modes</summary>
+                ${osnapTypes.map(([type, label]) => `
+                    <label style="display:flex; align-items:center; gap:6px; margin:4px 0;">
+                        <input type="checkbox" class="prop-osnap-type" data-osnap-type="${type}"${checked(type)}>
+                        ${label}
+                    </label>
+                `).join('')}
+            </details>
+        `;
+    }
+
+    function bindOsnapProperties() {
+        const modesGroup = document.getElementById('osnap-modes-group');
+        if (modesGroup) {
+            modesGroup.addEventListener('toggle', () => {
+                localStorage.setItem('cad_osnap_modes_open', modesGroup.open ? 'true' : 'false');
+            });
+        }
+        document.querySelectorAll('.prop-osnap-type').forEach(input => {
+            input.addEventListener('change', event => {
+                const type = event.target.dataset.osnapType;
+                if (event.target.checked) enabledOsnapTypes.add(type);
+                else enabledOsnapTypes.delete(type);
+                localStorage.setItem('cad_osnap_types', JSON.stringify([...enabledOsnapTypes]));
+                render();
+            });
+        });
+    }
 
     let undoStack = [];
     let redoStack = [];
@@ -2635,7 +2686,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function getDrawingPayload() {
         return {
-            entities: normalizeTextEntities(entities)
+            entities: normalizeTextEntities(entities),
+            viewCenterX: camera.zoom ? -camera.x / camera.zoom : 0,
+            viewCenterY: camera.zoom ? camera.y / camera.zoom : 0,
+            viewCenterVersion: 2,
+            zoom: camera.zoom
         };
     }
 
@@ -3386,7 +3441,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const cursorWorld = screenToWorld(mouseScreenX, mouseScreenY);
         const refPt = isDrawing ? (currentTool === 'pline' && plineVertices.length > 0 ? plineVertices[plineVertices.length - 1] : startPoint) : (activeGrip ? activeGrip.startWorld : null);
-        const { discrete, segments } = getSnapCandidates(refPt, excludeEntity);
+        let { discrete, segments } = getSnapCandidates(refPt, excludeEntity);
+        discrete = discrete.filter(point => isOsnapTypeEnabled(point.type));
 
         let bestSnap = null;
         let bestPriority = 99;
@@ -3424,7 +3480,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (discreteOnly) return bestSnap;
 
-        segments.forEach(seg => {
+        if (isOsnapTypeEnabled('nearest')) segments.forEach(seg => {
             const res = pointToSegmentDistance(cursorWorld.x, cursorWorld.y, seg.p1.x, seg.p1.y, seg.p2.x, seg.p2.y);
             const screenPt = worldToScreen(res.x, res.y);
             const d = Math.hypot(mouseScreenX - screenPt.x, mouseScreenY - screenPt.y);
@@ -3438,6 +3494,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             : (excludeEntity instanceof Map ? new Set(excludeEntity.keys())
             : (excludeEntity ? new Set([excludeEntity]) : null));
         if (!segmentOnly) entities.filter(e => !excludeSetForNearest || !excludeSetForNearest.has(e)).forEach(e => {
+            if (!isOsnapTypeEnabled('nearest')) return;
             if (e.type === 'circle') {
                 const angle = Math.atan2(cursorWorld.y - e.cy, cursorWorld.x - e.cx);
                 const nx = e.cx + e.r * Math.cos(angle);
@@ -4172,6 +4229,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return moveCommand.source.map(item => translateEntity(
             JSON.parse(JSON.stringify(item.state)), offsetX, offsetY
         ));
+    }
+
+    function scaleEntity(ent, basePoint, factor) {
+        const scalePoint = point => ({
+            x: basePoint.x + (point.x - basePoint.x) * factor,
+            y: basePoint.y + (point.y - basePoint.y) * factor
+        });
+        if (ent.type === 'line') {
+            const p1 = scalePoint({ x: ent.x1, y: ent.y1 });
+            const p2 = scalePoint({ x: ent.x2, y: ent.y2 });
+            ent.x1 = p1.x; ent.y1 = p1.y; ent.x2 = p2.x; ent.y2 = p2.y;
+        } else if (ent.type === 'rect') {
+            const p = scalePoint({ x: ent.x, y: ent.y });
+            ent.x = p.x; ent.y = p.y; ent.w *= factor; ent.h *= factor;
+        } else if (ent.type === 'pline' || ent.type === 'polygon') {
+            ent.points.forEach(point => Object.assign(point, scalePoint(point)));
+        } else if (['circle', 'ellipse', 'arc'].includes(ent.type)) {
+            const p = scalePoint({ x: ent.cx, y: ent.cy });
+            ent.cx = p.x; ent.cy = p.y;
+            ent.r = ent.r !== undefined ? Math.abs(ent.r * factor) : ent.r;
+            if (ent.rx !== undefined) ent.rx = Math.abs(ent.rx * factor);
+            if (ent.ry !== undefined) ent.ry = Math.abs(ent.ry * factor);
+        } else if (ent.type === 'text') {
+            const p = scalePoint({ x: ent.x, y: ent.y });
+            ent.x = p.x; ent.y = p.y;
+            ent.height = Math.max(0.001, ent.height * Math.abs(factor));
+            if (ent.textBox) {
+                ent.textBox.minX *= factor; ent.textBox.minY *= factor;
+                ent.textBox.maxX *= factor; ent.textBox.maxY *= factor;
+            }
+        } else if (ent.type === 'point') {
+            const p = scalePoint({ x: ent.x, y: ent.y });
+            ent.x = p.x; ent.y = p.y;
+        } else if (ent.type === 'dimension') {
+            if (ent.kind === 'angle') {
+                const center = scalePoint({ x: ent.cx, y: ent.cy });
+                const ray1 = scalePoint(getAngleDimensionRayEnd(ent, 'start'));
+                const ray2 = scalePoint(getAngleDimensionRayEnd(ent, 'end'));
+                const text = scalePoint(getDimensionTextPosition(ent));
+                ent.cx = center.x; ent.cy = center.y;
+                ent.r *= Math.abs(factor);
+                ent.ray1X = ray1.x; ent.ray1Y = ray1.y;
+                ent.ray2X = ray2.x; ent.ray2Y = ray2.y;
+                ent.textX = text.x; ent.textY = text.y;
+            } else {
+                const p1 = scalePoint({ x: ent.x1, y: ent.y1 });
+                const p2 = scalePoint({ x: ent.x2, y: ent.y2 });
+                ent.x1 = p1.x; ent.y1 = p1.y; ent.x2 = p2.x; ent.y2 = p2.y;
+                if (Number.isFinite(ent.textX) && Number.isFinite(ent.textY)) {
+                    const text = scalePoint({ x: ent.textX, y: ent.textY });
+                    ent.textX = text.x; ent.textY = text.y;
+                }
+                ent.offset *= factor;
+            }
+        } else if (ent.type === 'dxf-import') {
+            (ent.children || []).forEach(child => scaleEntity(child, basePoint, factor));
+            (ent.labels || []).forEach(label => {
+                const p = scalePoint(label);
+                label.x = p.x; label.y = p.y;
+            });
+        }
+        if (ent.hatch) {
+            ent.hatch.distance = Math.abs((ent.hatch.distance || 0) * factor);
+            ent.hatch.spacing = Math.abs((ent.hatch.spacing || 0) * factor);
+        }
+        return ent;
+    }
+
+    function startScaleCommand() {
+        if (!selectedEntities.size) {
+            showToast('Select one or more objects to scale.', 'warning', 1800);
+            return;
+        }
+        scaleCommand = {
+            source: [...selectedEntities].map(entity => ({ entity, state: JSON.parse(JSON.stringify(entity)) })),
+            basePoint: null,
+            referencePoint: null,
+            factor: null
+        };
+        setActiveToolbarButton('btn-scale');
+        statusMode.innerText = 'SCALE: BASE POINT';
+        showToast('Specify a snap base point.', 'info', 2200);
+        primeActiveSnap();
+        render();
+    }
+
+    function getScalePreviewEntities() {
+        if (!scaleCommand || !scaleCommand.basePoint || !Number.isFinite(scaleCommand.factor)) return [];
+        return scaleCommand.source.map(item => scaleEntity(JSON.parse(JSON.stringify(item.state)), scaleCommand.basePoint, scaleCommand.factor));
     }
 
     // Offset geometry preserves shared miter joins between consecutive polyline segments.
@@ -5779,6 +5925,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             getMovePreviewEntities().forEach(entity => drawEntity(entity, true));
             ctx.restore();
         }
+            ctx.save();
+            ctx.globalAlpha = 0.35;
+            getScalePreviewEntities().forEach(entity => drawEntity(entity, true));
+            ctx.restore();
+        }
 
         const dimensionPreview = getDimensionPreview();
         if (dimensionPreview) drawEntity(dimensionPreview, true);
@@ -5945,12 +6096,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="text" id="prop-username" maxlength="24" value="">
                 </div>
             </div>
+            ${renderOsnapProperties()}
         `;
 
         if (!selectedEntity) {
             propCount.innerText = 'No selection';
             propContainer.innerHTML = html + `<div style="color: var(--text-muted); text-align: center; margin-top: 40px;">Select an entity to view and edit its properties.</div>`;
             bindUsernameInput();
+            bindOsnapProperties();
             return;
         }
 
@@ -6358,6 +6511,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         propContainer.innerHTML = html;
+        bindOsnapProperties();
 
         const bindInput = (id, callback) => {
             const el = document.getElementById(id);
@@ -7149,6 +7303,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 return;
             }
+            if (scaleCommand) {
+                scaleCommand = null;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Scale cancelled.', 'info', 1200);
+                return;
+            }
+            if (scaleCommand) {
+                const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
+                if (!scaleCommand.basePoint) {
+                    scaleCommand.basePoint = commandPoint;
+                    statusMode.innerText = 'SCALE: REFERENCE';
+                    showToast('Specify the reference distance.', 'info', 2200);
+                    render();
+                } else if (!scaleCommand.referencePoint) {
+                    scaleCommand.referencePoint = commandPoint;
+                    statusMode.innerText = 'SCALE: FINAL POINT';
+                    showToast('Specify the final distance.', 'info', 2200);
+                } else {
+                    const referenceDistance = Math.hypot(
+                        scaleCommand.referencePoint.x - scaleCommand.basePoint.x,
+                        scaleCommand.referencePoint.y - scaleCommand.basePoint.y
+                    );
+                    const distance = Math.hypot(commandPoint.x - scaleCommand.basePoint.x, commandPoint.y - scaleCommand.basePoint.y);
+                    const factor = referenceDistance > 1e-9 ? Math.max(0.001, distance / referenceDistance) : 1;
+                    saveState();
+                    scaleCommand.source.forEach(item => {
+                        const scaled = scaleEntity(JSON.parse(JSON.stringify(item.state)), scaleCommand.basePoint, factor);
+                        Object.keys(item.entity).forEach(key => delete item.entity[key]);
+                        Object.assign(item.entity, scaled);
+                    });
+                    scaleCommand = null;
+                    setActiveToolbarButton('tool-select');
+                    statusMode.innerText = 'MODE: SELECT';
+                    updatePropertiesPalette();
+                    render();
+                    triggerAutoSave();
+                    showToast('Object(s) scaled.', 'success', 1500);
+                }
+                return;
+            }
 
             if (currentTool === 'select') {
                 if (pastePreview) {
@@ -7415,6 +7611,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             render();
             return;
         }
+        if (scaleCommand && scaleCommand.basePoint && scaleCommand.referencePoint) {
+            const currentPoint = getCommandPoint(sx, sy);
+            const referenceDistance = Math.hypot(
+                scaleCommand.referencePoint.x - scaleCommand.basePoint.x,
+                scaleCommand.referencePoint.y - scaleCommand.basePoint.y
+            );
+            scaleCommand.factor = referenceDistance > 1e-9
+                ? Math.max(0.001, Math.hypot(currentPoint.x - scaleCommand.basePoint.x, currentPoint.y - scaleCommand.basePoint.y) / referenceDistance)
+                : null;
+            currentMouse = currentPoint;
+            statusCoords.innerText = `X: ${formatCoord(currentMouse.x)} | Y: ${formatCoord(currentMouse.y)}`;
+            render();
+            return;
+        }
 
         if (isSelectingBox) {
             selectionBoxCurrent = screenToWorld(sx, sy);
@@ -7598,6 +7808,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         camera.zoom = Math.max(0.05, Math.min(camera.zoom * zoomFactor, MAX_ZOOM));
         camera.x = mouseX - canvas.width / 2 - worldBefore.x * camera.zoom;
         camera.y = mouseY - canvas.height / 2 + worldBefore.y * camera.zoom;
+        if (isPanning) {
+            panStart = { x: e.clientX - camera.x, y: e.clientY - camera.y };
+        }
 
         persistCameraView();
         statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
@@ -7772,6 +7985,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             startMoveCommand();
             return;
         }
+        if ((e.key === 's' || e.key === 'S') && !editingText && currentTool === 'select') {
+            e.preventDefault();
+            startScaleCommand();
+            return;
+        }
 
         if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !editingText && currentTool === 'select') {
             e.preventDefault();
@@ -7824,6 +8042,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             const chk = document.getElementById('osnapToggle');
             chk.checked = !chk.checked;
             document.getElementById('status-osnap').innerText = `OSNAP: ${chk.checked ? 'ON' : 'OFF'}`;
+            updatePropertiesPalette();
             showToast(`OSNAP: ${chk.checked ? 'ON' : 'OFF'}`, chk.checked ? 'success' : 'warning', 1800);
         } else if (e.key === 'F8') {
             e.preventDefault();
@@ -8071,6 +8290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     document.getElementById('btn-move').addEventListener('click', startMoveCommand);
+    document.getElementById('btn-scale').addEventListener('click', startScaleCommand);
     document.getElementById('btn-offset').addEventListener('click', startOffsetCommand);
         document.getElementById('btn-dimension').addEventListener('click', startDimensionCommand);
         document.getElementById('btn-trim').addEventListener('click', startTrimCommand);
@@ -8140,7 +8360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     camera.x = -viewCenterX * camera.zoom;
                     camera.y = Number(res.data.viewCenterY) * camera.zoom;
                 }
-                if (fitInitialView && !hasSavedView && !hasSavedCameraView && entities.length > 0) {
+                if (!hasSavedView && entities.length > 0) {
                     zoomToExtents();
                 }
                 if (!entitiesOnly && ['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
@@ -8212,6 +8432,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     });
 
     statusZoom.innerText = `ZOOM: ${(camera.zoom * 100).toFixed(0)}%`;
+    document.getElementById('osnapToggle').addEventListener('change', event => {
+        document.getElementById('status-osnap').innerText = `OSNAP: ${event.target.checked ? 'ON' : 'OFF'}`;
+        updatePropertiesPalette();
+    });
     resize();
     refreshDrawingList();
     loadDrawing(drawingFileName.value, false, false);
