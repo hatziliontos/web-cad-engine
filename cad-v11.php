@@ -2932,6 +2932,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return items.map(entity => {
             if (entity.type === 'dxf-import' && entity.boardType === 'title-board') {
                 const normalizedBoard = { ...entity };
+                normalizedBoard.children = (normalizedBoard.children || []).map(child => child.type === 'text'
+                    ? { ...child, textMode: child.textMode === 'multiline' ? 'multiline' : 'one-line', fontFamily: ['Arial', 'Arial Narrow', 'Tahoma', 'Verdana', 'Consolas', 'Courier New'].includes(child.fontFamily) ? child.fontFamily : 'Arial' }
+                    : child);
                 if (normalizedBoard.rotationUnit !== 'rad') {
                     normalizedBoard.rotation = (Number(normalizedBoard.rotation) || 0) * Math.PI / 180;
                     normalizedBoard.rotationUnit = 'rad';
@@ -6848,6 +6851,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     boardFieldHeights[child.boardField] = Number(child.height) || 0.1;
                 }
             });
+            const boardFieldSettings = Object.fromEntries(titleBoardFieldNames.map(field => {
+                const child = (selectedEntity.children || []).find(item => item.boardField === field) || {};
+                return [field, {
+                    textMode: child.textMode === 'multiline' ? 'multiline' : 'one-line',
+                    fontFamily: ['Arial', 'Arial Narrow', 'Tahoma', 'Verdana', 'Consolas', 'Courier New'].includes(child.fontFamily) ? child.fontFamily : 'Arial'
+                }];
+            }));
             const safeBoardValue = value => String(value || '')
                 .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -6856,11 +6866,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="prop-group-title">Title Board Fields</div>
                     <div class="prop-row"><label>Rotation (${getAngleUnitLabel()})</label><input type="text" id="prop-board-rotation" value="${formatCoord(angleRadiansToUnitValue(Number(selectedEntity.rotation) || 0))}"></div>
                     ${titleBoardFieldNames.map(field => `
-                        <div class="prop-row">
-                            <label>${field}</label>
-                            <input type="text" class="prop-board-field" data-board-field="${field}" data-board-kind="text" value="${safeBoardValue(boardFieldValues[field])}">
-                            <input type="text" class="prop-board-field-height" data-board-field="${field}" value="${formatCoord(boardFieldHeights[field])}" title="${field} height">
-                        </div>
+                        <details class="prop-board-field-details" ${boardFieldSettings[field].textMode === 'multiline' ? 'open' : ''}>
+                            <summary>${field}</summary>
+                            <div class="prop-row"><label>Content</label><textarea class="prop-board-field" data-board-field="${field}" rows="${boardFieldSettings[field].textMode === 'multiline' ? 3 : 1}">${safeBoardValue(boardFieldValues[field])}</textarea></div>
+                            <div class="prop-row"><label>Height</label><input type="text" class="prop-board-field-height" data-board-field="${field}" value="${formatCoord(boardFieldHeights[field])}"></div>
+                            <div class="prop-row"><label>Font</label><select class="prop-board-field-font" data-board-field="${field}">
+                                ${['Arial', 'Arial Narrow', 'Tahoma', 'Verdana', 'Consolas', 'Courier New'].map(font => `<option value="${font}" ${font === boardFieldSettings[field].fontFamily ? 'selected' : ''}>${font}</option>`).join('')}
+                            </select></div>
+                            <div class="prop-row"><label>Text mode</label><select class="prop-board-field-mode" data-board-field="${field}">
+                                <option value="one-line" ${boardFieldSettings[field].textMode === 'one-line' ? 'selected' : ''}>One line</option>
+                                <option value="multiline" ${boardFieldSettings[field].textMode === 'multiline' ? 'selected' : ''}>Multiline</option>
+                            </select></div>
+                        </details>
                     `).join('')}
                 </div>
             `;
@@ -7129,6 +7146,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     saveState();
                     child.height = value;
+                    updatePropertiesPalette();
+                    render();
+                    triggerAutoSave();
+                });
+            });
+            document.querySelectorAll('.prop-board-field-font').forEach(input => {
+                input.addEventListener('change', event => {
+                    const field = event.target.dataset.boardField;
+                    const child = (selectedEntity.children || []).find(item => item.boardField === field);
+                    if (!child) return;
+                    saveState();
+                    child.fontFamily = event.target.value;
+                    render();
+                    triggerAutoSave();
+                });
+            });
+            document.querySelectorAll('.prop-board-field-mode').forEach(input => {
+                input.addEventListener('change', event => {
+                    const field = event.target.dataset.boardField;
+                    const child = (selectedEntity.children || []).find(item => item.boardField === field);
+                    if (!child) return;
+                    saveState();
+                    child.textMode = event.target.value === 'multiline' ? 'multiline' : 'one-line';
+                    if (child.textMode === 'one-line') child.text = String(child.text || '').replace(/[\r\n]+/g, ' ');
                     updatePropertiesPalette();
                     render();
                     triggerAutoSave();
