@@ -361,9 +361,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
         }
     }
     $drawingEntities = $flattenEntities($drawingSourceEntities);
-    // Keep the title board last, like a title-block insertion, and exclude it
-    // from all drawing/grid extents.
-    $entities = array_merge($drawingEntities, $flattenEntities($titleBoardSourceEntities));
+    $entities = $drawingEntities;
     $paperSpec = getPaperFrameSpecFromKey($paperSizeKey);
     $paperFrameWidth = ($paperSpec['widthMm'] / 1000) * $scale;
     $paperFrameHeight = ($paperSpec['heightMm'] / 1000) * $scale;
@@ -461,6 +459,27 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
     $hArchTickBR  = "2A";
     $hNorthArrowBR = "2E";
     $hNext        = 0x50;
+    $titleBoardDefs = [];
+    foreach ($titleBoardSourceEntities as $boardIndex => $board) {
+        $children = is_array($board['children'] ?? null) ? $board['children'] : [];
+        $bounds = getDXFGridBounds($children);
+        $center = is_array($board['rotationCenter'] ?? null)
+            ? ['x' => (float)$board['rotationCenter']['x'], 'y' => (float)$board['rotationCenter']['y']]
+            : ($bounds ? [
+                'x' => ((float)$bounds['minX'] + (float)$bounds['maxX']) / 2,
+                'y' => ((float)$bounds['minY'] + (float)$bounds['maxY']) / 2
+            ] : ['x' => 0.0, 'y' => 0.0]);
+        $titleBoardDefs[] = [
+            'name' => 'TITLE_BOARD_' . ($boardIndex + 1),
+            'recordHandle' => dechex($hNext++),
+            'blockHandle' => dechex($hNext++),
+            'endHandle' => dechex($hNext++),
+            'insertHandle' => dechex($hNext++),
+            'center' => $center,
+            'rotation' => (float)($board['rotation'] ?? 0),
+            'children' => $children
+        ];
+    }
 
     if (is_array($entities)) {
         $alignedDimIndex = 1;
@@ -797,7 +816,7 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
     $dxf[] = "2{$nl}BLOCK_RECORD";
     $dxf[] = "5{$nl}22";
     $dxf[] = "100{$nl}AcDbSymbolTable";
-    $dxf[] = "70{$nl}" . (4 + count($alignedDimensionDefs));
+    $dxf[] = "70{$nl}" . (4 + count($alignedDimensionDefs) + count($titleBoardDefs));
 
     $dxf[] = "0{$nl}BLOCK_RECORD";
     $dxf[] = "5{$nl}{$hModelBlockR}";
@@ -825,12 +844,71 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
     $dxf[] = "100{$nl}AcDbBlockTableRecord";
     $dxf[] = "2{$nl}NORTH_ARROW";
 
+    foreach ($titleBoardDefs as $boardDef) {
+        $center = $boardDef['center'];
+        $record = $boardDef['recordHandle'];
+        $dxf[] = "0{$nl}BLOCK";
+        $dxf[] = "5{$nl}{$boardDef['blockHandle']}";
+        $dxf[] = "330{$nl}{$record}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbBlockBegin";
+        $dxf[] = "2{$nl}{$boardDef['name']}";
+        $dxf[] = "70{$nl}0";
+        $dxf[] = "10{$nl}0.0000";
+        $dxf[] = "20{$nl}0.0000";
+        $dxf[] = "30{$nl}0.0000";
+        $dxf[] = "3{$nl}{$boardDef['name']}";
+        $dxf[] = "1{$nl}";
+        foreach ($boardDef['children'] as $child) {
+            $type = $child['type'] ?? '';
+            $color = hexToACI($child['color'] ?? '#ffffff');
+            $handle = dechex($hNext++);
+            $point = static fn(float $x, float $y): array => [$x - $center['x'], $y - $center['y']];
+            if ($type === 'line') {
+                [$x1, $y1] = $point((float)$child['x1'], (float)$child['y1']);
+                [$x2, $y2] = $point((float)$child['x2'], (float)$child['y2']);
+                $dxf[] = "0{$nl}LINE"; $dxf[] = "5{$nl}{$handle}"; $dxf[] = "330{$nl}{$record}";
+                $dxf[] = "100{$nl}AcDbEntity"; $dxf[] = "8{$nl}0"; $dxf[] = "62{$nl}{$color}";
+                $dxf[] = "100{$nl}AcDbLine"; $dxf[] = "10{$nl}" . sprintf('%.4f', $x1); $dxf[] = "20{$nl}" . sprintf('%.4f', $y1);
+                $dxf[] = "11{$nl}" . sprintf('%.4f', $x2); $dxf[] = "21{$nl}" . sprintf('%.4f', $y2);
+            } elseif ($type === 'rect' || ($type === 'pline' && !empty($child['closed']))) {
+                $points = $type === 'rect'
+                    ? [[$child['x'], $child['y']], [$child['x'] + $child['w'], $child['y']], [$child['x'] + $child['w'], $child['y'] + $child['h']], [$child['x'], $child['y'] + $child['h']]]
+                    : array_map(static fn($p) => [$p['x'], $p['y']], $child['points'] ?? []);
+                if (!$points) continue;
+                $dxf[] = "0{$nl}LWPOLYLINE"; $dxf[] = "5{$nl}{$handle}"; $dxf[] = "330{$nl}{$record}";
+                $dxf[] = "100{$nl}AcDbEntity"; $dxf[] = "8{$nl}0"; $dxf[] = "62{$nl}{$color}";
+                $dxf[] = "100{$nl}AcDbPolyline"; $dxf[] = "90{$nl}" . count($points); $dxf[] = "70{$nl}1";
+                foreach ($points as [$x, $y]) { $dxf[] = "10{$nl}" . sprintf('%.4f', $x - $center['x']); $dxf[] = "20{$nl}" . sprintf('%.4f', $y - $center['y']); }
+            } elseif ($type === 'text') {
+                [$x, $y] = $point((float)($child['x'] ?? 0), (float)($child['y'] ?? 0));
+                $height = max(0.001, (float)($child['height'] ?? $child['size'] ?? 0.1));
+                $dxf[] = "0{$nl}MTEXT"; $dxf[] = "5{$nl}{$handle}"; $dxf[] = "330{$nl}{$record}";
+                $dxf[] = "100{$nl}AcDbEntity"; $dxf[] = "8{$nl}0"; $dxf[] = "62{$nl}{$color}";
+                $dxf[] = "100{$nl}AcDbMText"; $dxf[] = "10{$nl}" . sprintf('%.4f', $x); $dxf[] = "20{$nl}" . sprintf('%.4f', $y);
+                $dxf[] = "40{$nl}" . sprintf('%.4f', $height); $dxf[] = "41{$nl}" . sprintf('%.4f', $measureTextWidth((string)($child['text'] ?? ''), $height));
+                $dxf[] = "1{$nl}" . $encodeDxfUnicodeText((string)($child['text'] ?? '')); $dxf[] = "7{$nl}STANDARD";
+                $dxf[] = "50{$nl}" . sprintf('%.1f', (float)($child['rotation'] ?? 0)); $dxf[] = "71{$nl}5"; $dxf[] = "72{$nl}5";
+            }
+        }
+        $dxf[] = "0{$nl}ENDBLK"; $dxf[] = "5{$nl}{$boardDef['endHandle']}"; $dxf[] = "330{$nl}{$record}";
+        $dxf[] = "100{$nl}AcDbEntity"; $dxf[] = "8{$nl}0"; $dxf[] = "100{$nl}AcDbBlockEnd";
+    }
+
     foreach ($alignedDimensionDefs as $dimDef) {
         $dxf[] = "0{$nl}BLOCK_RECORD";
         $dxf[] = "5{$nl}{$dimDef['blockRecordHandle']}";
         $dxf[] = "100{$nl}AcDbSymbolTableRecord";
         $dxf[] = "100{$nl}AcDbBlockTableRecord";
         $dxf[] = "2{$nl}{$dimDef['blockName']}";
+    }
+    foreach ($titleBoardDefs as $boardDef) {
+        $dxf[] = "0{$nl}BLOCK_RECORD";
+        $dxf[] = "5{$nl}{$boardDef['recordHandle']}";
+        $dxf[] = "100{$nl}AcDbSymbolTableRecord";
+        $dxf[] = "100{$nl}AcDbBlockTableRecord";
+        $dxf[] = "2{$nl}{$boardDef['name']}";
     }
 
     $dxf[] = "0{$nl}ENDTAB";
@@ -1472,6 +1550,24 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                 $dxf[] = "98{$nl}0";
             }
         }
+    }
+
+    foreach ($titleBoardDefs as $boardDef) {
+        $insert = $boardDef['center'];
+        $dxf[] = "0{$nl}INSERT";
+        $dxf[] = "5{$nl}{$boardDef['insertHandle']}";
+        $dxf[] = "330{$nl}{$hModelBlockR}";
+        $dxf[] = "100{$nl}AcDbEntity";
+        $dxf[] = "8{$nl}0";
+        $dxf[] = "100{$nl}AcDbBlockReference";
+        $dxf[] = "2{$nl}{$boardDef['name']}";
+        $dxf[] = "10{$nl}" . sprintf('%.4f', $insert['x']);
+        $dxf[] = "20{$nl}" . sprintf('%.4f', $insert['y']);
+        $dxf[] = "30{$nl}0.0000";
+        $dxf[] = "41{$nl}1.0000";
+        $dxf[] = "42{$nl}1.0000";
+        $dxf[] = "43{$nl}1.0000";
+        $dxf[] = "50{$nl}" . sprintf('%.4f', rad2deg($boardDef['rotation']));
     }
 
     $gridBounds = getDXFGridBounds($drawingEntities);
