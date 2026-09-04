@@ -57,9 +57,9 @@ http://localhost:8000/cad-v10.php
 Οι γεωμετρικές συντεταγμένες είναι model/world units. Το zoom επηρεάζει μόνο
 την οθόνη και όχι τις αποθηκευμένες διαστάσεις.
 
-Το Scale εφαρμόζεται στα επιλεγμένα αντικείμενα γύρω από snap base point.
-Μετά το base point ο χρήστης ορίζει reference distance και final distance,
-ώστε ο συντελεστής να υπολογίζεται ως `final / reference`.
+Το Scale εφαρμόζεται στα επιλεγμένα αντικείμενα γύρω από ένα snap base point.
+Μετά την επιλογή του σημείου ο χρήστης εισάγει απευθείας τον θετικό αριθμητικό
+συντελεστή scale.
 
 ### Εργαλεία και πλοήγηση
 
@@ -243,8 +243,7 @@ Geometry is stored in model/world units. Camera zoom is visual only and never
 changes stored geometry.
 
 Scale operates on all selected objects around a snapped base point. The command
-then asks for a reference distance and a final distance; the factor is computed
-as `final / reference`.
+then asks directly for a positive numeric scale factor.
 
 ### Tools and shortcuts
 

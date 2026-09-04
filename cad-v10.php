@@ -4316,9 +4316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         scaleCommand = {
             source: [...selectedEntities].map(entity => ({ entity, state: JSON.parse(JSON.stringify(entity)) })),
-            basePoint: null,
-            referencePoint: null,
-            factor: null
+            basePoint: null
         };
         setActiveToolbarButton('btn-scale');
         statusMode.innerText = 'SCALE: BASE POINT';
@@ -7320,20 +7318,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
                 if (!scaleCommand.basePoint) {
                     scaleCommand.basePoint = commandPoint;
-                    statusMode.innerText = 'SCALE: REFERENCE';
-                    showToast('Specify the reference distance.', 'info', 2200);
-                    render();
-                } else if (!scaleCommand.referencePoint) {
-                    scaleCommand.referencePoint = commandPoint;
-                    statusMode.innerText = 'SCALE: FINAL POINT';
-                    showToast('Specify the final distance.', 'info', 2200);
-                } else {
-                    const referenceDistance = Math.hypot(
-                        scaleCommand.referencePoint.x - scaleCommand.basePoint.x,
-                        scaleCommand.referencePoint.y - scaleCommand.basePoint.y
-                    );
-                    const distance = Math.hypot(commandPoint.x - scaleCommand.basePoint.x, commandPoint.y - scaleCommand.basePoint.y);
-                    const factor = referenceDistance > 1e-9 ? Math.max(0.001, distance / referenceDistance) : 1;
+                    const rawFactor = window.prompt('Scale factor:', '1');
+                    if (rawFactor === null) {
+                        scaleCommand = null;
+                        setActiveToolbarButton('tool-select');
+                        statusMode.innerText = 'MODE: SELECT';
+                        render();
+                        return;
+                    }
+                    const factor = Number(rawFactor.trim());
+                    if (!Number.isFinite(factor) || factor <= 0) {
+                        showToast('Scale factor must be a positive number.', 'warning', 2200);
+                        scaleCommand = null;
+                        setActiveToolbarButton('tool-select');
+                        statusMode.innerText = 'MODE: SELECT';
+                        render();
+                        return;
+                    }
                     saveState();
                     scaleCommand.source.forEach(item => {
                         const scaled = scaleEntity(JSON.parse(JSON.stringify(item.state)), scaleCommand.basePoint, factor);
@@ -7616,21 +7617,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             render();
             return;
         }
-        if (scaleCommand && scaleCommand.basePoint && scaleCommand.referencePoint) {
-            const currentPoint = getCommandPoint(sx, sy);
-            const referenceDistance = Math.hypot(
-                scaleCommand.referencePoint.x - scaleCommand.basePoint.x,
-                scaleCommand.referencePoint.y - scaleCommand.basePoint.y
-            );
-            scaleCommand.factor = referenceDistance > 1e-9
-                ? Math.max(0.001, Math.hypot(currentPoint.x - scaleCommand.basePoint.x, currentPoint.y - scaleCommand.basePoint.y) / referenceDistance)
-                : null;
-            currentMouse = currentPoint;
-            statusCoords.innerText = `X: ${formatCoord(currentMouse.x)} | Y: ${formatCoord(currentMouse.y)}`;
-            render();
-            return;
-        }
-
         if (isSelectingBox) {
             selectionBoxCurrent = screenToWorld(sx, sy);
             selectionBoxMoved = Math.hypot(
