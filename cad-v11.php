@@ -1068,11 +1068,21 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                 foreach ($points as $point) { $dxf[] = "10{$nl}" . sprintf('%.4f', (float)$point[0] - $center['x']); $dxf[] = "20{$nl}" . sprintf('%.4f', (float)$point[1] - $center['y']); }
             } elseif ($type === 'text') {
                 $height = max(0.001, (float)($child['height'] ?? $child['size'] ?? 0.1));
-                $dxf[] = "0{$nl}MTEXT"; $dxf[] = "5{$nl}{$handle}"; $dxf[] = "330{$nl}{$record}";
-                $dxf[] = "100{$nl}AcDbEntity"; $dxf[] = "8{$nl}0"; $dxf[] = "62{$nl}{$color}"; $dxf[] = "100{$nl}AcDbMText";
+                $text = (string)($child['text'] ?? '');
+                $isMultiline = ($child['textMode'] ?? 'one-line') === 'multiline';
+                if (!$isMultiline) $text = preg_replace('/[\r\n]+/', ' ', $text);
+                $entityClass = $isMultiline ? 'AcDbMText' : 'AcDbText';
+                $dxf[] = "0{$nl}" . ($isMultiline ? 'MTEXT' : 'TEXT');
+                $dxf[] = "5{$nl}{$handle}"; $dxf[] = "330{$nl}{$record}";
+                $dxf[] = "100{$nl}AcDbEntity"; $dxf[] = "8{$nl}0"; $dxf[] = "62{$nl}{$color}"; $dxf[] = "100{$nl}{$entityClass}";
                 $dxf[] = "10{$nl}" . sprintf('%.4f', (float)($child['x'] ?? 0) - $center['x']); $dxf[] = "20{$nl}" . sprintf('%.4f', (float)($child['y'] ?? 0) - $center['y']);
-                $dxf[] = "40{$nl}" . sprintf('%.4f', $height); $dxf[] = "41{$nl}" . sprintf('%.4f', $measureTextWidth((string)($child['text'] ?? ''), $height));
-                $dxf[] = "1{$nl}" . $encodeDxfUnicodeText((string)($child['text'] ?? '')); $dxf[] = "7{$nl}STANDARD"; $dxf[] = "71{$nl}5"; $dxf[] = "72{$nl}5";
+                $dxf[] = "40{$nl}" . sprintf('%.4f', $height); $dxf[] = "1{$nl}" . $encodeDxfUnicodeText($text); $dxf[] = "7{$nl}STANDARD";
+                if ($isMultiline) {
+                    $dxf[] = "41{$nl}" . sprintf('%.4f', $measureTextWidth($text, $height));
+                    $dxf[] = "71{$nl}5"; $dxf[] = "72{$nl}5";
+                } else {
+                    $dxf[] = "50{$nl}" . sprintf('%.1f', (float)($child['rotation'] ?? 0));
+                }
             }
         }
         $dxf[] = "0{$nl}ENDBLK"; $dxf[] = "5{$nl}{$boardDef['endHandle']}"; $dxf[] = "330{$nl}{$record}";
@@ -1396,7 +1406,8 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                 $dxf[] = "72{$nl}5";
             } elseif ($type === 'text') {
                 $text = (string)($ent['text'] ?? '');
-                if (($ent['textMode'] ?? 'one-line') !== 'multiline') {
+                $isMultiline = ($ent['textMode'] ?? 'one-line') === 'multiline';
+                if (!$isMultiline) {
                     $text = preg_replace('/[\r\n]+/', ' ', $text);
                 }
                 $height = max(0.001, (float)($ent['height'] ?? $ent['size'] ?? 0.1));
@@ -1409,23 +1420,25 @@ function generateDXF2007($entities, $angleUnit = 'deg', $printScale = 100, $pape
                     'bottom-left' => 7, 'bottom-center' => 8, 'bottom-right' => 9
                 ][$justify] ?? 5;
                 $textWidth = $measureTextWidth($text, $height);
-                $dxf[] = "0{$nl}MTEXT";
+                $dxf[] = "0{$nl}" . ($isMultiline ? 'MTEXT' : 'TEXT');
                 $dxf[] = "5{$nl}{$handle}";
                 $dxf[] = "330{$nl}{$hModelBlockR}";
                 $dxf[] = "100{$nl}AcDbEntity";
                 $dxf[] = "8{$nl}0";
                 $dxf[] = "62{$nl}{$color}";
-                $dxf[] = "100{$nl}AcDbMText";
+                $dxf[] = "100{$nl}" . ($isMultiline ? 'AcDbMText' : 'AcDbText');
                 $dxf[] = "10{$nl}" . sprintf('%.4f', (float)($ent['x'] ?? 0));
                 $dxf[] = "20{$nl}" . sprintf('%.4f', (float)($ent['y'] ?? 0));
                 $dxf[] = "30{$nl}0.0000";
                 $dxf[] = "40{$nl}" . sprintf('%.4f', $height);
-                $dxf[] = "41{$nl}" . sprintf('%.4f', $textWidth);
                 $dxf[] = "1{$nl}" . $encodeDxfUnicodeText($text);
                 $dxf[] = "7{$nl}STANDARD";
                 $dxf[] = "50{$nl}" . sprintf('%.1f', (float)($ent['rotation'] ?? 0));
-                $dxf[] = "71{$nl}{$attachment}";
-                $dxf[] = "72{$nl}5";
+                if ($isMultiline) {
+                    $dxf[] = "41{$nl}" . sprintf('%.4f', $textWidth);
+                    $dxf[] = "71{$nl}{$attachment}";
+                    $dxf[] = "72{$nl}5";
+                }
             } elseif ($type === 'dimension' && ($ent['kind'] ?? 'distance') !== 'angle') {
                 $dx = (float)$ent['x2'] - (float)$ent['x1'];
                 $dy = (float)$ent['y2'] - (float)$ent['y1'];
