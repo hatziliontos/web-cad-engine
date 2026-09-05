@@ -153,7 +153,8 @@ http://localhost:8000/cad-v11.php
 
 ### Διαστάσεις και contours
 
-Οι aligned dimensions εμφανίζουν το μήκος πάνω στη dimension line. Οι angular
+Οι aligned dimensions εμφανίζουν το μήκος πάνω στη dimension line και διαθέτουν
+ιδιότητα Placement για τοποθέτηση Above ή Below του νοητού άξονα. Οι angular
 dimensions εμφανίζουν τόξο, γωνιακή τιμή, Ray1 και Ray2 grips, καθώς και τα
 μήκη των construction rays. Η ιδιότητα Ray2 αλλάζει το μήκος της δεύτερης
 ακτίνας χωρίς να αλλάζει τη διεύθυνσή της.

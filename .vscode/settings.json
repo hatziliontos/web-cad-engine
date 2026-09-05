@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^php -l cad-v11\\.php$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

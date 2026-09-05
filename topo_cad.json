@@ -186,9 +186,9 @@
             "y1": 2439.588847613435,
             "x2": 1574.4761230535446,
             "y2": 2442.8492911886206,
-            "offset": 1.7985612998927536e-13,
-            "textX": 1556.4022022649951,
-            "textY": 2440.6247246483235,
+            "offset": -1.3300471835009375e-13,
+            "textX": 1561.231362879167,
+            "textY": 2441.219105316784,
             "decimals": 2,
             "color": "#ffffff",
             "width": 2
@@ -299,12 +299,13 @@
             "y1": 2401.4397088066507,
             "x2": 1571.2121650926179,
             "y2": 2404.2292384062166,
-            "offset": -3.0300153181155034,
-            "textX": 1547.3719515082812,
-            "textY": 2399.831238442457,
-            "decimals": 3,
+            "offset": -3.268496584496461e-13,
+            "textX": 1554.2199149667326,
+            "textY": 2403.25772635824,
+            "decimals": 2,
             "color": "#ffffff",
-            "width": 2
+            "width": 2,
+            "placement": "below"
         },
         {
             "type": "line",
@@ -334,12 +335,13 @@
             "y1": 2401.4397088066507,
             "x2": 1554.2199149667326,
             "y2": 2403.25772635824,
-            "offset": 2.1738166822160565e-13,
-            "textX": 1536.169381398115,
-            "textY": 2402.2257081908756,
+            "offset": 1.192379528447418e-13,
+            "textX": 1538.3208795228597,
+            "textY": 2402.3487175824453,
             "decimals": 2,
             "color": "#ffffff",
-            "width": 2
+            "width": 2,
+            "placement": "above"
         },
         {
             "type": "line",
@@ -356,12 +358,13 @@
             "y1": 2403.25772635824,
             "x2": 1581.0061705999583,
             "y2": 2404.7891992282293,
-            "offset": -2.59015031645049e-13,
-            "textX": 1567.620783997581,
-            "textY": 2404.023905388114,
+            "offset": 2.59015031645049e-13,
+            "textX": 1567.6130427833455,
+            "textY": 2404.023462793235,
             "decimals": 2,
             "color": "#ffffff",
-            "width": 2
+            "width": 2,
+            "placement": "above"
         },
         {
             "type": "line",
@@ -432,31 +435,663 @@
             "y1": 2401.7269489033824,
             "x2": 1532.4317978791673,
             "y2": 2372.701262316784,
-            "offset": 2.986499936241671e-13,
-            "textX": 1528.534147419327,
-            "textY": 2395.391302316192,
+            "offset": 3.601563491884008e-13,
+            "textX": 1529.4756040606994,
+            "textY": 2389.910644399186,
             "decimals": 2,
             "color": "#ffffff",
-            "width": 2
+            "width": 2,
+            "placement": "above"
         },
         {
             "type": "dimension",
             "kind": "angle",
-            "cx": 1530.7133620901702,
-            "cy": 2370.3066542893953,
+            "cx": 1530.7133788389704,
+            "cy": 2370.3066130102297,
             "r": 30,
-            "startAzi": 1.5747848044574566,
-            "endAzi": 6.022900306619834,
-            "ray1X": 1613.2153228791665,
-            "ray1Y": 2369.977595316784,
-            "ray2X": 1522.9926952649262,
-            "ray2Y": 2399.296109097498,
-            "angleMode": "interior",
-            "textX": 1549.9580083724468,
-            "textY": 2395.2443594560314,
+            "startAzi": 1.5747841817926003,
+            "endAzi": 0.9562936505398439,
+            "ray1X": 1613.2153628791666,
+            "ray1Y": 2369.9776053167843,
+            "ray2X": 1544.9953402466012,
+            "ray2Y": 2380.3845683051595,
+            "angleMode": "exterior",
+            "textX": 1502.586301809492,
+            "textY": 2355.2063719157345,
             "decimals": 3,
             "color": "#ffffff",
             "width": 2
+        },
+        {
+            "type": "dxf-import",
+            "name": "Πινακίδα Α4",
+            "boardType": "title-board",
+            "color": "#ffffff",
+            "width": 1,
+            "rotation": 0,
+            "children": [
+                {
+                    "type": "rect",
+                    "x": 1626.352999437573,
+                    "y": 2364.055153963812,
+                    "w": 41.99999999999989,
+                    "h": 59.4000000000002,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2418.782543834953,
+                    "w": 41.5624999999999,
+                    "h": 4.450104884626925,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2410.3718456030083,
+                    "w": 41.5624999999999,
+                    "h": 7.320422535211292,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2404.831465021649,
+                    "w": 41.5624999999999,
+                    "h": 4.450104884626925,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2396.4207667897044,
+                    "w": 41.5624999999999,
+                    "h": 7.320422535211292,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2395.330491092971,
+                    "w": 32.81249999999992,
+                    "h": -9.345220257716543,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1659.3842494375729,
+                    "y": 2385.985270835255,
+                    "w": 8.749999999999979,
+                    "h": 9.345220257716138,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2383.0704521358257,
+                    "w": 41.5624999999999,
+                    "h": 1.8245430026970393,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2380.155633436396,
+                    "w": 41.5624999999999,
+                    "h": 1.8245430026970393,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1626.5717494375729,
+                    "y": 2364.2776592080445,
+                    "w": 20.78124999999995,
+                    "h": 14.787698531618721,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "rect",
+                    "x": 1647.3529994375729,
+                    "y": 2364.2776592080445,
+                    "w": 20.78124999999995,
+                    "h": 14.787698531618721,
+                    "color": "#ffffff",
+                    "width": 1
+                },
+                {
+                    "type": "text",
+                    "x": 1636.942370221001,
+                    "y": 2379.039313683507,
+                    "text": "ΘΕΩΡΗΣΗ",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "top-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBox": {
+                        "minX": -10.390624999999975,
+                        "minY": -1.0680251723094907,
+                        "maxX": 10.390624999999975,
+                        "maxY": 0
+                    },
+                    "textBackground": "none",
+                    "fontFamily": "Arial"
+                },
+                {
+                    "type": "text",
+                    "x": 1657.8231299275585,
+                    "y": 2379.0148838214773,
+                    "text": "Ο ΣΥΝΤΑΞΑΣ",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "top-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    }
+                },
+                {
+                    "type": "text",
+                    "x": 1663.801034291523,
+                    "y": 2390.7107721233174,
+                    "text": "ARSXED",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "middle-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    },
+                    "boardField": "ARSXED"
+                },
+                {
+                    "type": "text",
+                    "x": 1627.329052325278,
+                    "y": 2383.9879065932305,
+                    "text": "ΚΛΙΜΑΚΑ",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "middle-left",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    }
+                },
+                {
+                    "type": "text",
+                    "x": 1657.0817910314966,
+                    "y": 2383.9841599292704,
+                    "text": "KLIMAKA",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "middle-left",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    },
+                    "boardField": "KLIMAKA"
+                },
+                {
+                    "type": "text",
+                    "x": 1627.2785052241616,
+                    "y": 2394.3785114384928,
+                    "text": "ΘΕΜΑ ΣΧΕΔΙΟΥ",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "middle-left",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    }
+                },
+                {
+                    "type": "text",
+                    "x": 1643.046702825793,
+                    "y": 2389.8898508328884,
+                    "text": "THEMA_SXEDIOU",
+                    "height": 0.8900209769253851,
+                    "textMode": "multiline",
+                    "rotation": 0,
+                    "justify": "middle-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -16.33754661177885,
+                        "minY": -3.904579997633488,
+                        "maxX": 16.337546611779846,
+                        "maxY": 3.904579997633488
+                    },
+                    "boardField": "THEMA_SXEDIOU"
+                },
+                {
+                    "type": "text",
+                    "x": 1627.31165395161,
+                    "y": 2380.9900399956896,
+                    "text": "ΧΡΟΝΟΣ ΜΕΛΕΤΗΣ",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "middle-left",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    }
+                },
+                {
+                    "type": "text",
+                    "x": 1656.891885083397,
+                    "y": 2380.99481553058,
+                    "text": "XRONOSMELETHS",
+                    "height": 0.8900209769253851,
+                    "textMode": "one-line",
+                    "rotation": 0,
+                    "justify": "middle-left",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -3.644127173841545,
+                        "minY": -1.3814597369527135,
+                        "maxX": 3.64412717384055,
+                        "maxY": 0
+                    },
+                    "boardField": "XRONOSMELETHS"
+                },
+                {
+                    "type": "text",
+                    "x": 1647.3529994375729,
+                    "y": 2421.007596277266,
+                    "text": "ERGODOTIS",
+                    "height": 0.8900209769253851,
+                    "textMode": "multiline",
+                    "rotation": 0,
+                    "justify": "middle-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -20.78124999999995,
+                        "minY": -2.2250524423134626,
+                        "maxX": 20.78124999999995,
+                        "maxY": 2.2250524423134626
+                    },
+                    "boardField": "ERGODOTIS"
+                },
+                {
+                    "type": "text",
+                    "x": 1647.3529994375729,
+                    "y": 2414.032056870613,
+                    "text": "ERGO",
+                    "height": 0.8900209769253851,
+                    "textMode": "multiline",
+                    "rotation": 0,
+                    "justify": "middle-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -20.78124999999995,
+                        "minY": -3.6602112676045935,
+                        "maxX": 20.78124999999995,
+                        "maxY": 3.660211267606617
+                    },
+                    "boardField": "ERGO"
+                },
+                {
+                    "type": "text",
+                    "x": 1647.3529994375729,
+                    "y": 2407.0565174639623,
+                    "text": "PERIOXI",
+                    "height": 0.8900209769253851,
+                    "textMode": "multiline",
+                    "rotation": 0,
+                    "justify": "middle-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Consolas",
+                    "textBox": {
+                        "minX": -20.78124999999995,
+                        "minY": -2.2250524423134626,
+                        "maxX": 20.78124999999995,
+                        "maxY": 2.2250524423134626
+                    },
+                    "boardField": "PERIOXI"
+                },
+                {
+                    "type": "text",
+                    "x": 1647.3529994375729,
+                    "y": 2400.080978057311,
+                    "text": "MELETITIS",
+                    "height": 0.8900209769253851,
+                    "textMode": "multiline",
+                    "rotation": 0,
+                    "justify": "middle-center",
+                    "color": "#ffffff",
+                    "width": 1,
+                    "textBackground": "none",
+                    "fontFamily": "Arial",
+                    "textBox": {
+                        "minX": -20.78124999999995,
+                        "minY": -3.660211267606617,
+                        "maxX": 20.78124999999995,
+                        "maxY": 3.6602112676045935
+                    },
+                    "boardField": "MELETITIS"
+                }
+            ],
+            "boardFields": {
+                "ERGODOTIS": "ERGODOTIS",
+                "ERGO": "ERGO",
+                "PERIOXI": "PERIOXI",
+                "MELETITIS": "MELETITIS",
+                "THEMA_SXEDIOU": "THEMA_SXEDIOU",
+                "ARSXED": "ARSXED",
+                "KLIMAKA": "KLIMAKA",
+                "XRONOSMELETHS": "XRONOSMELETHS"
+            },
+            "rotationCenter": {
+                "x": 1647.352999437573,
+                "y": 2393.755153963812
+            },
+            "rotationUnit": "rad"
+        },
+        {
+            "type": "point",
+            "x": 1535.8913193605563,
+            "y": 2387.639732520431,
+            "z": 0,
+            "showText": true,
+            "color": "#ffffff",
+            "width": 2,
+            "name": "12",
+            "showZ": false,
+            "showName": true
+        },
+        {
+            "type": "point",
+            "x": 1535.566484133595,
+            "y": 2392.092612390549,
+            "z": 0,
+            "showText": true,
+            "color": "#ffffff",
+            "width": 2,
+            "name": "13",
+            "showZ": false
+        },
+        {
+            "type": "point",
+            "x": 1542.2647324184907,
+            "y": 2392.105125126448,
+            "z": 0,
+            "showName": true,
+            "showZ": false,
+            "color": "#ffffff",
+            "width": 2,
+            "name": "14"
+        },
+        {
+            "type": "point",
+            "x": 1542.4123637656635,
+            "y": 2387.6375636963576,
+            "z": 0,
+            "showName": true,
+            "showZ": false,
+            "color": "#ffffff",
+            "width": 2,
+            "name": "15"
+        },
+        {
+            "type": "pline",
+            "points": [
+                {
+                    "x": 1535.8913193605563,
+                    "y": 2387.639732520431
+                },
+                {
+                    "x": 1535.566484133595,
+                    "y": 2392.092612390549
+                },
+                {
+                    "x": 1542.2647324184907,
+                    "y": 2392.105125126448
+                },
+                {
+                    "x": 1542.4123637656635,
+                    "y": 2387.6375636963576
+                },
+                {
+                    "x": 1535.8913193605563,
+                    "y": 2387.639732520431
+                }
+            ],
+            "closed": false,
+            "elevation": 0,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1539.0734747607703,
+            "y": 2389.8652001523787,
+            "text": "1/Λ\n",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 2
+        },
+        {
+            "type": "circle",
+            "cx": 1539.9947479026625,
+            "cy": 2429.5565497734838,
+            "r": 1,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1540.0571426262454,
+            "y": 2429.525352411692,
+            "text": "1",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "circle",
+            "cx": 1563.5676784267155,
+            "cy": 2432.4580423612533,
+            "r": 1,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1563.6300731502984,
+            "y": 2432.4268449994615,
+            "text": "2",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "circle",
+            "cx": 1591.3615466486451,
+            "cy": 2435.8790723663724,
+            "r": 1,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1591.423941372228,
+            "y": 2435.8478750045806,
+            "text": "3",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "circle",
+            "cx": 1589.2332257523194,
+            "cy": 2401.5423816301086,
+            "r": 1,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1589.2956204759023,
+            "y": 2401.511184268317,
+            "text": "4",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "circle",
+            "cx": 1547.9954327225855,
+            "cy": 2399.1846589939933,
+            "r": 1,
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1548.0578274461684,
+            "y": 2399.1534616322015,
+            "text": "5",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "circle",
+            "cx": 1561.5757199405953,
+            "cy": 2396.4690836851164,
+            "r": 2,
+            "color": "#ffffff",
+            "width": 2
+        },
+        {
+            "type": "line",
+            "x1": 1559.5757199405953,
+            "y1": 2396.4690836851164,
+            "x2": 1563.5757199405953,
+            "y2": 2396.4690836851164,
+            "color": "#ffffff",
+            "width": 2
+        },
+        {
+            "type": "text",
+            "x": 1561.5795946928974,
+            "y": 2397.43377193534,
+            "text": "Ο.Τ.",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
+        },
+        {
+            "type": "text",
+            "x": 1561.5255008512574,
+            "y": 2395.4356042922245,
+            "text": "60",
+            "height": 1,
+            "textMode": "one-line",
+            "fontFamily": "Arial",
+            "rotation": 0,
+            "justify": "center",
+            "color": "#ffffff",
+            "width": 1
         }
-    ]
+    ],
+    "viewCenterX": 1663.2800985808697,
+    "viewCenterY": 2365.5632847265615,
+    "viewCenterVersion": 2,
+    "zoom": 2.4874381152430907
 }
