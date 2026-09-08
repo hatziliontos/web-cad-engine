@@ -2435,14 +2435,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="btn-hatch" class="icon-btn" title="Hatch with offset (H)"><svg viewBox="0 0 24 24"><path d="M4 18L18 4M8 20L20 8M4 12L12 4"/><path d="M4 20h16V4H4z"/></svg><span class="sr-only">Hatch with offset</span></button>
     </div>
 
-    <div class="btn-group">
+    <div style="display:none" aria-hidden="true">
         <select id="angleUnits" title="Angle Measurement Unit (Saved)">
             <option value="deg">Degrees (°)</option>
             <option value="grad">Grads (g)</option>
             <option value="rad">Radians (rad)</option>
         </select>
-    </div>
-    <div style="display:none" aria-hidden="true">
         <select id="paperSize">
             <option value="A4-P">A4 P</option><option value="A4-L">A4 L</option>
             <option value="A3-P">A3 P</option><option value="A3-L" selected>A3 L</option>
@@ -2455,9 +2453,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <option value="200">Scale 1:200</option><option value="500">Scale 1:500</option>
             <option value="1000">Scale 1:1000</option>
         </select>
-    </div>
-    <div class="btn-group">
-            <input type="color" id="strokeColor" value="#ffffff" title="Entity Color">
+        <input type="color" id="strokeColor" value="#ffffff" title="Entity Color">
         <select id="lineWidth" title="Line Width">
             <option value="1">1 px</option>
             <option value="2" selected>2 px</option>
@@ -2552,6 +2548,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const angleUnitsSelect = document.getElementById('angleUnits');
     const paperSizeSelect = document.getElementById('paperSize');
     const printScaleSelect = document.getElementById('printScale');
+    const strokeColorInput = document.getElementById('strokeColor');
     const lineWidthSelect = document.getElementById('lineWidth');
     const toastContainer = document.getElementById('toast-container');
     const saveIndicator = document.getElementById('save-indicator');
@@ -2617,6 +2614,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     const savedPrintScale = localStorage.getItem('cad_print_scale') || '100';
     if ([...printScaleSelect.options].some(option => option.value === savedPrintScale)) {
         printScaleSelect.value = savedPrintScale;
+    }
+    const savedStrokeColor = localStorage.getItem('cad_stroke_color');
+    if (/^#[0-9a-f]{6}$/i.test(savedStrokeColor || '')) {
+        strokeColorInput.value = savedStrokeColor;
+    }
+    const savedLineWidth = localStorage.getItem('cad_line_width');
+    if ([...lineWidthSelect.options].some(option => option.value === savedLineWidth)) {
+        lineWidthSelect.value = savedLineWidth;
     }
 
     function showToast(message, type = 'info', duration = 2500) {
@@ -6612,6 +6617,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ${[...printScaleSelect.options].map(option => `<option value="${option.value}" ${option.value === printScaleSelect.value ? 'selected' : ''}>${option.textContent}</option>`).join('')}
                     </select>
                 </div>
+                <div class="prop-row">
+                    <label for="prop-angle-unit">Angle unit</label>
+                    <select id="prop-angle-unit">
+                        ${[...angleUnitsSelect.options].map(option => `<option value="${option.value}" ${option.value === angleUnitsSelect.value ? 'selected' : ''}>${option.textContent}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="prop-row">
+                    <label for="prop-stroke-color">Color</label>
+                    <input type="color" id="prop-stroke-color" value="${strokeColorInput.value}">
+                </div>
+                <div class="prop-row">
+                    <label for="prop-line-width">Line width</label>
+                    <select id="prop-line-width">
+                        ${[...lineWidthSelect.options].map(option => `<option value="${option.value}" ${option.value === lineWidthSelect.value ? 'selected' : ''}>${option.textContent}</option>`).join('')}
+                    </select>
+                </div>
             </details>
             ${renderOsnapProperties()}
         `;
@@ -7694,6 +7715,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             localStorage.setItem('cad_print_scale', printScaleSelect.value);
             render();
         });
+        const angleUnitInput = document.getElementById('prop-angle-unit');
+        if (angleUnitInput) angleUnitInput.addEventListener('change', event => {
+            angleUnitsSelect.value = event.target.value;
+            angleUnitsSelect.dispatchEvent(new Event('change'));
+        });
+        const strokeColorProperty = document.getElementById('prop-stroke-color');
+        if (strokeColorProperty) strokeColorProperty.addEventListener('input', event => {
+            strokeColorInput.value = event.target.value;
+            strokeColorInput.dispatchEvent(new Event('input'));
+            render();
+        });
+        const lineWidthProperty = document.getElementById('prop-line-width');
+        if (lineWidthProperty) lineWidthProperty.addEventListener('change', event => {
+            lineWidthSelect.value = event.target.value;
+            lineWidthSelect.dispatchEvent(new Event('change'));
+        });
     }
 
     canvas.addEventListener('contextmenu', (e) => {
@@ -8552,7 +8589,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         render();
     });
 
+    strokeColorInput.addEventListener('input', () => {
+        localStorage.setItem('cad_stroke_color', strokeColorInput.value);
+    });
+
     lineWidthSelect.addEventListener('change', () => {
+        localStorage.setItem('cad_line_width', lineWidthSelect.value);
         triggerAutoSave();
     });
 
@@ -9215,8 +9257,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!hasSavedView && entities.length > 0) {
                     zoomToExtents();
                 }
-                if (!entitiesOnly && ['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
+                if (!entitiesOnly && !savedLineWidth && ['1', '2', '3', '4'].includes(String(res.data.lineWidth))) {
                     lineWidthSelect.value = String(res.data.lineWidth);
+                    localStorage.setItem('cad_line_width', lineWidthSelect.value);
                 }
             }
             selectedEntity = null;
