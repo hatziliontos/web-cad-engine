@@ -3,6 +3,8 @@
 
 // Drawing file selection, revision tracking, and collaborative-presence identity.
 $defaultFileName = 'cad_drawing.json';
+$cadVersion = 'v13';
+$cadDeveloper = 'Χατζηλιόντος Ι. Χριστόδουλος';
 
 function sanitizeDrawingFileName($fileName) {
     $fileName = trim((string)$fileName);
@@ -1983,6 +1985,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         unset($entity);
+        $decoded['version'] = $cadVersion;
+        $decoded['developer'] = $cadDeveloper;
         $formatted = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if (file_put_contents($dataFile, $formatted, LOCK_EX) !== false) {
             setcookie('cad_file', basename($dataFile), time() + 31536000, '', '', false, true);
@@ -2411,6 +2415,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             overflow: hidden;
         }
         #statusbar > div { min-width: 0; white-space: nowrap; }
+        #status-left { display: flex; align-items: center; gap: 8px; }
+        #status-version {
+            flex: 0 0 auto;
+            background: rgba(0,0,0,0.25);
+            padding: 2px 6px;
+            border-radius: 2px;
+            cursor: help;
+        }
         #statusbar > div:last-child { display: flex; align-items: center; gap: 4px; overflow-x: auto; }
         #active-users { flex: 0 0 auto; color: #fff; }
         .osnap-badge {
@@ -2528,15 +2540,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <button id="tool-point" class="tool-btn icon-btn" data-tool="point" title="Point"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg><span class="sr-only">Point</span></button>
         <button id="tool-text" class="tool-btn icon-btn" data-tool="text" title="Text"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 18h10M6 6v12M18 6v12M8 10h8"/><path d="M8 14h8"/></svg><span class="sr-only">Text</span></button>
         <button id="btn-generate-contours" class="icon-btn" title="Generate Contours"><svg viewBox="0 0 24 24"><path d="M4 7c3-3 6 3 9 0s6 3 7 0M4 12c3-3 6 3 9 0s6 3 7 0M4 17c3-3 6 3 9 0s6 3 7 0"/></svg><span class="sr-only">Generate Contours</span></button>
-        <button id="btn-move" class="icon-btn" title="Move selected objects (M)"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
-        <button id="btn-scale" class="icon-btn" title="Scale selected objects (S)"><svg viewBox="0 0 24 24"><path d="M5 19L19 5M8 5h11v11"/><path d="M5 19h11V8"/></svg><span class="sr-only">Scale</span></button>
-        <button id="btn-offset" class="icon-btn" title="Offset selected object (O)"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H4z"/><path d="M8 16V8h8v8H8z"/></svg><span class="sr-only">Offset</span></button>
-        <button id="btn-trim" class="icon-btn" title="Trim selected object (T)"><svg viewBox="0 0 24 24"><path d="M5 17L17 5"/><path d="M8 9l2 2M14 15l3 3"/><path d="M4 12h4M16 12h4"/><circle cx="17" cy="5" r="2"/><circle cx="5" cy="17" r="2"/></svg><span class="sr-only">Trim</span></button>
-        <button id="btn-dimension" class="icon-btn" title="Aligned dimension (D)"><svg viewBox="0 0 24 24"><path d="M6 17L18 9M6 17l4-1M6 17l2-3M18 9l-4 1M18 9l-2 3"/><path d="M4 20l3-5M17 9l3-5"/></svg><span class="sr-only">Aligned dimension</span></button>
-        <button id="btn-angle-dimension" class="icon-btn" title="Angle dimension (A)"><svg viewBox="0 0 24 24"><path d="M6 16a8 8 0 0 1 8-8"/><path d="M6 16l8-8"/><path d="M8 18h10v-2H8z"/><circle cx="6" cy="16" r="1.5"/><circle cx="14" cy="8" r="1.5"/></svg><span class="sr-only">Angle dimension</span></button>
+        <button id="btn-move" class="icon-btn" title="Move selected objects"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span class="sr-only">Move</span></button>
+        <button id="btn-scale" class="icon-btn" title="Scale selected objects"><svg viewBox="0 0 24 24"><path d="M5 19L19 5M8 5h11v11"/><path d="M5 19h11V8"/></svg><span class="sr-only">Scale</span></button>
+        <button id="btn-offset" class="icon-btn" title="Offset selected object"><svg viewBox="0 0 24 24"><path d="M4 20V4h16v16H4z"/><path d="M8 16V8h8v8H8z"/></svg><span class="sr-only">Offset</span></button>
+        <button id="btn-trim" class="icon-btn" title="Trim selected object"><svg viewBox="0 0 24 24"><path d="M5 17L17 5"/><path d="M8 9l2 2M14 15l3 3"/><path d="M4 12h4M16 12h4"/><circle cx="17" cy="5" r="2"/><circle cx="5" cy="17" r="2"/></svg><span class="sr-only">Trim</span></button>
+        <button id="btn-break" class="icon-btn" title="Break at 2 points"><svg viewBox="0 0 24 24"><path d="M4 16l6-6M14 10l6-6"/><path d="M9 12l3-3M12 15l3-3"/><circle cx="10" cy="10" r="1.5"/><circle cx="14" cy="14" r="1.5"/></svg><span class="sr-only">Break at 2 points</span></button>
+        <button id="btn-dimension" class="icon-btn" title="Aligned dimension"><svg viewBox="0 0 24 24"><path d="M6 17L18 9M6 17l4-1M6 17l2-3M18 9l-4 1M18 9l-2 3"/><path d="M4 20l3-5M17 9l3-5"/></svg><span class="sr-only">Aligned dimension</span></button>
+        <button id="btn-angle-dimension" class="icon-btn" title="Angle dimension"><svg viewBox="0 0 24 24"><path d="M6 16a8 8 0 0 1 8-8"/><path d="M6 16l8-8"/><path d="M8 18h10v-2H8z"/><circle cx="6" cy="16" r="1.5"/><circle cx="14" cy="8" r="1.5"/></svg><span class="sr-only">Angle dimension</span></button>
         <button id="btn-copy-jpg" class="icon-btn" title="Copy selection as JPG"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="9" cy="9" r="1.5"/><path d="M4 16l4-4 3 3 2-2 7 6"/></svg><span class="sr-only">Copy selection as JPG</span></button>
         <button id="btn-print-pdf" class="icon-btn" title="Print selection as PDF"><svg viewBox="0 0 24 24"><path d="M6 9V4h12v5M6 18H4v-7h16v7h-2"/><path d="M7 15h10v5H7z"/></svg><span class="sr-only">Print selection as PDF</span></button>
-        <button id="btn-hatch" class="icon-btn" title="Hatch with offset (H)"><svg viewBox="0 0 24 24"><path d="M4 18L18 4M8 20L20 8M4 12L12 4"/><path d="M4 20h16V4H4z"/></svg><span class="sr-only">Hatch with offset</span></button>
+        <button id="btn-hatch" class="icon-btn" title="Hatch with offset"><svg viewBox="0 0 24 24"><path d="M4 18L18 4M8 20L20 8M4 12L12 4"/><path d="M4 20h16V4H4z"/></svg><span class="sr-only">Hatch with offset</span></button>
     </div>
 
     <div style="display:none" aria-hidden="true">
@@ -2609,7 +2622,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 
 <div id="statusbar">
-    <div id="status-coords">X: 0.000 | Y: 0.000</div>
+    <div id="status-left">
+        <span id="status-version" title="WebCAD - Χατζηλιόντος Ι. Χριστόδουλος"><?= htmlspecialchars($cadVersion, ENT_QUOTES, 'UTF-8') ?></span>
+        <span id="status-coords">X: 0.000 | Y: 0.000</span>
+    </div>
     <div>
         <span id="status-mode" class="osnap-badge">MODE: SELECT</span>
         <span id="status-angle" class="osnap-badge">AZI: 0.0000°</span>
@@ -2768,8 +2784,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <li><kbd>Delete</kbd> / <kbd>Backspace</kbd>: διαγράφει όλα τα επιλεγμένα αντικείμενα. Αν είναι επιλεγμένο ανεξάρτητα ένα hatch, αφαιρεί μόνο το hatch.</li>
                 <li><kbd>Ctrl</kbd> + <kbd>C</kbd>: αντιγράφει τα επιλεγμένα αντικείμενα στο clipboard της εφαρμογής.</li>
                 <li><kbd>Ctrl</kbd> + <kbd>V</kbd>: εμφανίζει preview επικόλλησης· κλικ για τοποθέτηση ή <kbd>Esc</kbd> για ακύρωση.</li>
-                <li><kbd>Ctrl</kbd> + <kbd>Z</kbd>: Undo. <kbd>Ctrl</kbd> + <kbd>Y</kbd> ή <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd>: Redo.</li>
-                <li>Όσο το Select είναι ενεργό: <kbd>M</kbd> Move, <kbd>S</kbd> Scale, <kbd>O</kbd> Offset, <kbd>T</kbd> Trim, <kbd>H</kbd> Hatch, <kbd>D</kbd> Distance Dimension και <kbd>A</kbd> Angle Dimension.</li>
+                <li><kbd>Ctrl</kbd> + <kbd>Z</kbd>: Undo. <kbd>Ctrl</kbd> + <kbd>Y</kbd>: Redo.</li>
             </ul>
 
             <h4>Πρόσθετη αλληλεπίδραση</h4>
@@ -2845,27 +2860,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h4>Move και Scale</h4>
             <ul>
                 <li><strong>Άμεσο drag:</strong> μετακινεί και τα δύο άκρα κατά το ίδιο διάνυσμα, χωρίς αλλαγή μήκους και αζιμουθίου. Απενεργοποιείται όταν η γραμμή είναι Locked.</li>
-                <li><strong>Move</strong> ή <kbd>M</kbd>: μετακινεί τη γραμμή από σημείο βάσης σε τελικό σημείο. Λειτουργεί και όταν είναι Locked.</li>
-                <li><strong>Scale</strong> ή <kbd>S</kbd>: κλιμακώνει και τα δύο άκρα γύρω από το επιλεγμένο σημείο βάσης με τον δοθέντα συντελεστή.</li>
+                <li><strong>Move:</strong> μετακινεί τη γραμμή από σημείο βάσης σε τελικό σημείο. Λειτουργεί και όταν είναι Locked.</li>
+                <li><strong>Scale:</strong> κλιμακώνει και τα δύο άκρα γύρω από το επιλεγμένο σημείο βάσης με τον δοθέντα συντελεστή.</li>
             </ul>
 
             <h4>Offset</h4>
             <ul>
-                <li>Με επιλεγμένη μία γραμμή, το <strong>Offset</strong> ή <kbd>O</kbd> δημιουργεί παράλληλο αντίγραφο στην καθορισμένη απόσταση.</li>
+                <li>Με επιλεγμένη μία γραμμή, το <strong>Offset</strong> δημιουργεί παράλληλο αντίγραφο στην καθορισμένη απόσταση.</li>
                 <li>Το σημείο που επιλέγεται μετά την απόσταση καθορίζει σε ποια πλευρά της αρχικής γραμμής θα δημιουργηθεί το αντίγραφο.</li>
                 <li>Το νέο αντικείμενο διατηρεί το χρώμα, το πάχος και τις υπόλοιπες αποθηκευμένες ιδιότητες της αρχικής γραμμής.</li>
             </ul>
 
             <h4>Trim</h4>
             <ul>
-                <li>Με επιλεγμένη μία γραμμή, το <strong>Trim</strong> ή <kbd>T</kbd> ζητά σημείο κοπής πάνω στη γραμμή.</li>
+                <li>Με επιλεγμένη μία γραμμή, το <strong>Trim</strong> ζητά σημείο κοπής πάνω στη γραμμή.</li>
                 <li>Το κλικ προβάλλεται πάνω στο τμήμα και γίνεται το νέο άκρο της γραμμής.</li>
                 <li>Διατηρείται η πλευρά προς το πλησιέστερο αρχικό endpoint και αφαιρείται η υπόλοιπη.</li>
             </ul>
 
             <h4>Hatch κατά μήκος γραμμής</h4>
             <ul>
-                <li>Με επιλεγμένη μία γραμμή, το <strong>Hatch</strong> ή <kbd>H</kbd> δημιουργεί λωρίδα διαγράμμισης μεταξύ της γραμμής και μιας παράλληλης οριακής γραμμής.</li>
+                <li>Με επιλεγμένη μία γραμμή, το <strong>Hatch</strong> δημιουργεί λωρίδα διαγράμμισης μεταξύ της γραμμής και μιας παράλληλης οριακής γραμμής.</li>
                 <li>Η πλευρά ορίζεται με κλικ αριστερά ή δεξιά της γραμμής.</li>
                 <li>Οι ιδιότητες Hatch περιλαμβάνουν Distance, Spacing, Angle και Side (Left/Right).</li>
                 <li>Το hatch επιλέγεται ανεξάρτητα και αφαιρείται με <kbd>Delete</kbd> χωρίς να διαγράφεται η γραμμή.</li>
@@ -3226,6 +3241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     let scaleCommand = null;
     let offsetCommand = null;
     let trimCommand = null;
+    let breakCommand = null;
     let dimensionCommand = null;
     let angleDimensionCommand = null;
     let hatchCommand = null;
@@ -3348,6 +3364,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     function getDrawingPayload() {
         return {
+            version: <?= json_encode($cadVersion, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+            developer: <?= json_encode($cadDeveloper, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
             entities: normalizeTextEntities(entities),
             layers,
             viewCenterX: camera.zoom ? -camera.x / camera.zoom : 0,
@@ -5475,6 +5493,313 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return null;
     }
 
+    function getPolylinePathMetrics(entity) {
+        const points = entity.points || [];
+        const segmentCount = entity.closed ? points.length : Math.max(0, points.length - 1);
+        const cumulative = [0];
+        for (let index = 0; index < segmentCount; index++) {
+            const start = points[index];
+            const end = points[(index + 1) % points.length];
+            cumulative.push(cumulative[index] + Math.hypot(end.x - start.x, end.y - start.y));
+        }
+        return { points, segmentCount, cumulative, total: cumulative[segmentCount] || 0 };
+    }
+
+    function getPolylinePointAtDistance(entity, distance, metrics = getPolylinePathMetrics(entity)) {
+        if (!metrics.segmentCount || metrics.total < 1e-9) return null;
+        let target = distance;
+        if (entity.closed) target = ((target % metrics.total) + metrics.total) % metrics.total;
+        else target = Math.max(0, Math.min(metrics.total, target));
+
+        for (let index = 0; index < metrics.segmentCount; index++) {
+            const segmentStart = metrics.cumulative[index];
+            const segmentEnd = metrics.cumulative[index + 1];
+            if (target <= segmentEnd + 1e-9) {
+                const start = metrics.points[index];
+                const end = metrics.points[(index + 1) % metrics.points.length];
+                const length = segmentEnd - segmentStart;
+                const ratio = length > 1e-9 ? Math.max(0, Math.min(1, (target - segmentStart) / length)) : 0;
+                return {
+                    x: start.x + (end.x - start.x) * ratio,
+                    y: start.y + (end.y - start.y) * ratio
+                };
+            }
+        }
+        return { ...metrics.points[metrics.points.length - 1] };
+    }
+
+    function extractPolylineRange(entity, fromDistance, toDistance, metrics = getPolylinePathMetrics(entity)) {
+        if (toDistance - fromDistance < 1e-9) return [];
+        const result = [getPolylinePointAtDistance(entity, fromDistance, metrics)];
+        const firstCycle = entity.closed ? Math.floor(fromDistance / metrics.total) : 0;
+        const lastCycle = entity.closed ? Math.floor(toDistance / metrics.total) : 0;
+
+        for (let cycle = firstCycle; cycle <= lastCycle; cycle++) {
+            for (let index = 0; index < metrics.segmentCount; index++) {
+                const boundaryDistance = cycle * metrics.total + metrics.cumulative[index + 1];
+                if (boundaryDistance > fromDistance + 1e-9 && boundaryDistance < toDistance - 1e-9) {
+                    result.push({ ...metrics.points[(index + 1) % metrics.points.length] });
+                }
+            }
+        }
+        result.push(getPolylinePointAtDistance(entity, toDistance, metrics));
+        return result.filter((point, index, points) =>
+            index === 0 || Math.hypot(point.x - points[index - 1].x, point.y - points[index - 1].y) > 1e-9
+        );
+    }
+
+    function getBreakLocation(entity, point) {
+        if (entity.type === 'line') {
+            const projection = pointToSegmentDistance(point.x, point.y, entity.x1, entity.y1, entity.x2, entity.y2);
+            return { point: { x: projection.x, y: projection.y }, distance: projection.t };
+        }
+
+        if (entity.type === 'rect') {
+            const rectanglePath = {
+                type: 'pline',
+                closed: true,
+                points: [
+                    { x: entity.x, y: entity.y },
+                    { x: entity.x + entity.w, y: entity.y },
+                    { x: entity.x + entity.w, y: entity.y + entity.h },
+                    { x: entity.x, y: entity.y + entity.h }
+                ]
+            };
+            const location = getBreakLocation(rectanglePath, point);
+            return location ? { ...location, pathEntity: rectanglePath } : null;
+        }
+
+        if (entity.type === 'pline') {
+            const metrics = getPolylinePathMetrics(entity);
+            if (!metrics.segmentCount || metrics.total < 1e-9) return null;
+            let best = null;
+            for (let index = 0; index < metrics.segmentCount; index++) {
+                const start = metrics.points[index];
+                const end = metrics.points[(index + 1) % metrics.points.length];
+                const projection = pointToSegmentDistance(point.x, point.y, start.x, start.y, end.x, end.y);
+                if (!best || projection.dist < best.projection.dist) {
+                    const segmentLength = metrics.cumulative[index + 1] - metrics.cumulative[index];
+                    best = {
+                        projection,
+                        point: { x: projection.x, y: projection.y },
+                        distance: metrics.cumulative[index] + segmentLength * projection.t,
+                        metrics
+                    };
+                }
+            }
+            return best;
+        }
+
+        if (entity.type === 'circle' || entity.type === 'arc') {
+            const dx = point.x - entity.cx;
+            const dy = point.y - entity.cy;
+            if (Math.hypot(dx, dy) < 1e-9) return null;
+            let azimuth = calculateAzimuthRad(dx, dy);
+            if (entity.type === 'arc') {
+                let sweep = normalizeAngle(entity.endAzi - entity.startAzi);
+                if (sweep === 0) sweep = 2 * Math.PI;
+                let offset = normalizeAngle(azimuth - entity.startAzi);
+                if (offset > sweep) {
+                    const startPoint = {
+                        x: entity.cx + entity.r * Math.sin(entity.startAzi),
+                        y: entity.cy + entity.r * Math.cos(entity.startAzi)
+                    };
+                    const endPoint = {
+                        x: entity.cx + entity.r * Math.sin(entity.endAzi),
+                        y: entity.cy + entity.r * Math.cos(entity.endAzi)
+                    };
+                    const useStart = Math.hypot(point.x - startPoint.x, point.y - startPoint.y) <=
+                        Math.hypot(point.x - endPoint.x, point.y - endPoint.y);
+                    azimuth = useStart ? entity.startAzi : entity.endAzi;
+                    offset = useStart ? 0 : sweep;
+                }
+                return {
+                    point: {
+                        x: entity.cx + entity.r * Math.sin(azimuth),
+                        y: entity.cy + entity.r * Math.cos(azimuth)
+                    },
+                    distance: offset,
+                    azimuth,
+                    total: sweep
+                };
+            }
+            return {
+                point: {
+                    x: entity.cx + entity.r * Math.sin(azimuth),
+                    y: entity.cy + entity.r * Math.cos(azimuth)
+                },
+                distance: azimuth,
+                azimuth,
+                total: 2 * Math.PI
+            };
+        }
+
+        if (entity.type === 'ellipse') {
+            if (Math.abs(entity.rx) < 1e-9 || Math.abs(entity.ry) < 1e-9) return null;
+            const parameter = normalizeAngle(Math.atan2(
+                (point.y - entity.cy) / entity.ry,
+                (point.x - entity.cx) / entity.rx
+            ));
+            return {
+                point: {
+                    x: entity.cx + entity.rx * Math.cos(parameter),
+                    y: entity.cy + entity.ry * Math.sin(parameter)
+                },
+                distance: parameter,
+                parameter,
+                total: 2 * Math.PI
+            };
+        }
+        return null;
+    }
+
+    function cloneBreakEntity(entity) {
+        const clone = JSON.parse(JSON.stringify(entity));
+        delete clone.hatch;
+        return clone;
+    }
+
+    function createBreakParts(entity, firstLocation, secondLocation) {
+        const tolerance = 1e-7;
+        if (!firstLocation || !secondLocation) return null;
+
+        if (entity.type === 'line') {
+            const locations = [firstLocation, secondLocation].sort((a, b) => a.distance - b.distance);
+            if (locations[1].distance - locations[0].distance < tolerance) return null;
+            const parts = [];
+            if (locations[0].distance > tolerance) {
+                parts.push(Object.assign(cloneBreakEntity(entity), {
+                    x2: locations[0].point.x,
+                    y2: locations[0].point.y
+                }));
+            }
+            if (locations[1].distance < 1 - tolerance) {
+                parts.push(Object.assign(cloneBreakEntity(entity), {
+                    x1: locations[1].point.x,
+                    y1: locations[1].point.y
+                }));
+            }
+            return parts;
+        }
+
+        if (entity.type === 'pline') {
+            const metrics = firstLocation.metrics || getPolylinePathMetrics(entity);
+            if (entity.closed) {
+                let firstDistance = firstLocation.distance;
+                let secondDistance = secondLocation.distance;
+                const forwardDistance = ((secondDistance - firstDistance) % metrics.total + metrics.total) % metrics.total;
+                if (forwardDistance < tolerance) return null;
+                if (secondDistance <= firstDistance) secondDistance += metrics.total;
+                const remainingPoints = extractPolylineRange(entity, secondDistance, firstDistance + metrics.total, metrics);
+                if (remainingPoints.length < 2) return null;
+                return [Object.assign(cloneBreakEntity(entity), { points: remainingPoints, closed: false })];
+            }
+
+            const locations = [firstLocation, secondLocation].sort((a, b) => a.distance - b.distance);
+            if (locations[1].distance - locations[0].distance < tolerance) return null;
+            const parts = [];
+            if (locations[0].distance > tolerance) {
+                const points = extractPolylineRange(entity, 0, locations[0].distance, metrics);
+                if (points.length >= 2) parts.push(Object.assign(cloneBreakEntity(entity), { points, closed: false }));
+            }
+            if (locations[1].distance < metrics.total - tolerance) {
+                const points = extractPolylineRange(entity, locations[1].distance, metrics.total, metrics);
+                if (points.length >= 2) parts.push(Object.assign(cloneBreakEntity(entity), { points, closed: false }));
+            }
+            return parts;
+        }
+
+        if (entity.type === 'rect') {
+            const rectanglePath = firstLocation.pathEntity || secondLocation.pathEntity;
+            if (!rectanglePath) return null;
+            const parts = createBreakParts(rectanglePath, firstLocation, secondLocation);
+            if (!parts || !parts.length) return parts;
+            return parts.map(part => ({
+                type: 'pline',
+                points: part.points,
+                closed: false,
+                elevation: 0,
+                color: entity.color,
+                width: entity.width,
+                layer: entity.layer || '0',
+                locked: entity.locked === true
+            }));
+        }
+
+        if (entity.type === 'circle') {
+            const removedSweep = normalizeAngle(secondLocation.azimuth - firstLocation.azimuth);
+            if (removedSweep < tolerance || Math.abs(removedSweep - 2 * Math.PI) < tolerance) return null;
+            const arc = Object.assign(cloneBreakEntity(entity), {
+                type: 'arc',
+                startAzi: secondLocation.azimuth,
+                endAzi: firstLocation.azimuth,
+                reversed: false
+            });
+            resetArcMidpoint(arc);
+            return [arc];
+        }
+
+        if (entity.type === 'arc') {
+            const locations = [firstLocation, secondLocation].sort((a, b) => a.distance - b.distance);
+            if (locations[1].distance - locations[0].distance < tolerance) return null;
+            const parts = [];
+            if (locations[0].distance > tolerance) {
+                const firstArc = Object.assign(cloneBreakEntity(entity), { endAzi: locations[0].azimuth });
+                resetArcMidpoint(firstArc);
+                parts.push(firstArc);
+            }
+            if (locations[1].distance < firstLocation.total - tolerance) {
+                const secondArc = Object.assign(cloneBreakEntity(entity), { startAzi: locations[1].azimuth });
+                resetArcMidpoint(secondArc);
+                parts.push(secondArc);
+            }
+            return parts;
+        }
+
+        if (entity.type === 'ellipse') {
+            const removedSweep = normalizeAngle(secondLocation.parameter - firstLocation.parameter);
+            if (removedSweep < tolerance || Math.abs(removedSweep - 2 * Math.PI) < tolerance) return null;
+            const remainingSweep = 2 * Math.PI - removedSweep;
+            const segmentCount = Math.max(24, Math.ceil(remainingSweep / (Math.PI / 36)));
+            const points = [];
+            for (let index = 0; index <= segmentCount; index++) {
+                const parameter = secondLocation.parameter + remainingSweep * index / segmentCount;
+                points.push({
+                    x: entity.cx + entity.rx * Math.cos(parameter),
+                    y: entity.cy + entity.ry * Math.sin(parameter)
+                });
+            }
+            return [{
+                type: 'pline',
+                points,
+                closed: false,
+                elevation: 0,
+                color: entity.color,
+                width: entity.width,
+                layer: entity.layer || '0',
+                locked: entity.locked === true
+            }];
+        }
+        return null;
+    }
+
+    function startBreakCommand() {
+        if (!selectedEntity || selectedEntities.size !== 1) {
+            showToast('Select one line, polyline, rectangle, circle, ellipse or arc to break.', 'warning', 2200);
+            return;
+        }
+        if (!['line', 'pline', 'rect', 'circle', 'ellipse', 'arc'].includes(selectedEntity.type)) {
+            showToast('Break does not support the selected object type.', 'warning', 2200);
+            return;
+        }
+        breakCommand = { source: selectedEntity, firstLocation: null, previewLocation: null };
+        setActiveToolbarButton('btn-break');
+        statusMode.innerText = 'BREAK: FIRST POINT';
+        showToast('Snap or click the first break point.', 'info', 2200);
+        primeActiveSnap();
+        render();
+    }
+
     function startTrimCommand() {
         if (!selectedEntity || selectedEntities.size !== 1) {
             showToast('Select one line or polyline to trim.', 'warning', 1800);
@@ -7005,9 +7330,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Only exclude an entity if we have an active grip
             const snapToShow = activeSnap;
             if (currentTool !== 'select' || isDrawing || activeGrip || moveCommand || scaleCommand ||
-                dimensionCommand || angleDimensionCommand || isImageCaptureMode || isPdfPrintMode) {
+                breakCommand || dimensionCommand || angleDimensionCommand || isImageCaptureMode || isPdfPrintMode) {
                 drawSnapMarker(snapToShow);
             }
+        }
+
+        if (breakCommand) {
+            const locations = [breakCommand.firstLocation, breakCommand.previewLocation].filter(Boolean);
+            locations.forEach((location, index) => {
+                const point = worldToScreen(location.point.x, location.point.y);
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = index === 0 ? '#4caf50' : '#ff9800';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.restore();
+            });
         }
 
         if (isSelectingBox && selectionBoxStart && selectionBoxCurrent) {
@@ -8881,7 +9222,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             lastMiddleClickTime = now;
         }
 
-        if (e.button === 1 || e.buttons === 4 || e.altKey) {
+        if (e.button === 1 || e.buttons === 4) {
             isPanning = true;
             panStart = { x: e.clientX - camera.x, y: e.clientY - camera.y };
             return;
@@ -9095,6 +9436,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 render();
                 triggerAutoSave();
                 showToast('Distance dimension created.', 'success', 1500);
+                return;
+            }
+            if (breakCommand) {
+                const commandPoint = getCommandPoint(mouseScreen.x, mouseScreen.y);
+                const location = getBreakLocation(breakCommand.source, commandPoint);
+                if (!location) {
+                    showToast('The break point could not be placed on the selected object.', 'warning', 2200);
+                    return;
+                }
+                if (!breakCommand.firstLocation) {
+                    breakCommand.firstLocation = location;
+                    breakCommand.previewLocation = location;
+                    statusMode.innerText = 'BREAK: SECOND POINT';
+                    showToast('Snap or click the second break point.', 'info', 2200);
+                    render();
+                    return;
+                }
+
+                const parts = createBreakParts(breakCommand.source, breakCommand.firstLocation, location);
+                if (!parts) {
+                    showToast('The two break points must be different.', 'warning', 2200);
+                    return;
+                }
+                saveState();
+                const sourceIndex = entities.indexOf(breakCommand.source);
+                if (sourceIndex >= 0) entities.splice(sourceIndex, 1, ...parts);
+                breakCommand = null;
+                selectedHatch = null;
+                selectedEntities = new Set(parts);
+                selectedEntity = parts[parts.length - 1] || null;
+                selectedSegmentIndex = null;
+                selectedVertexIndex = 0;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                updatePropertiesPalette();
+                render();
+                triggerAutoSave();
+                showToast(`Break completed: ${parts.length} remaining object(s).`, 'success', 1800);
                 return;
             }
             if (offsetCommand) {
@@ -9351,7 +9730,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!isDrawing) {
                     isDrawing = true;
                     plineVertices = [effectiveCoords];
-                    showToast('Polyline: Click for vertices | Enter/Right-click to finish | "C" to close', 'info', 4000);
+                    showToast('Polyline: Click for vertices | Enter/Right-click to finish', 'info', 4000);
                 } else {
                     const lastPt = plineVertices[plineVertices.length - 1];
                     const nextPt = applyOrtho(lastPt, effectiveCoords);
@@ -9557,6 +9936,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 currentMouse = raw;
             }
         }
+        if (breakCommand) {
+            breakCommand.previewLocation = getBreakLocation(breakCommand.source, currentMouse);
+        }
 
         statusCoords.innerText = `X: ${formatCoord(currentMouse.x)} | Y: ${formatCoord(currentMouse.y)}`;
 
@@ -9579,7 +9961,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             applyGripModification(activeGrip, targetPt);
         }
 
-        if (isDrawing || dimensionCommand || activeSnap || activeGrip || hoveredGrip || isSelectingBox) render();
+        if (isDrawing || breakCommand || dimensionCommand || activeSnap || activeGrip || hoveredGrip || isSelectingBox) render();
     });
 
     window.addEventListener('mouseup', (e) => {
@@ -9977,42 +10359,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     window.addEventListener('keydown', (e) => {
         const editingText = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
-        if ((e.key === 'h' || e.key === 'H') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startHatchCommand();
-            return;
-        }
-        if ((e.key === 'd' || e.key === 'D') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startDimensionCommand();
-            return;
-        }
-        if ((e.key === 'a' || e.key === 'A') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startAngleDimensionCommand();
-            return;
-        }
-        if ((e.key === 'o' || e.key === 'O') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startOffsetCommand();
-            return;
-        }
-        if ((e.key === 't' || e.key === 'T') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startTrimCommand();
-            return;
-        }
-        if ((e.key === 'm' || e.key === 'M') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startMoveCommand();
-            return;
-        }
-        if ((e.key === 's' || e.key === 'S') && !editingText && currentTool === 'select') {
-            e.preventDefault();
-            startScaleCommand();
-            return;
-        }
-
         if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !editingText && currentTool === 'select') {
             e.preventDefault();
             selectedEntities = new Set(entities);
@@ -10067,7 +10413,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             return;
         }
 
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y' || ((e.key === 'z' || e.key === 'Z') && e.shiftKey))) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
             e.preventDefault();
             executeRedo();
             return;
@@ -10082,10 +10428,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else if (e.key === 'Enter') {
             if (currentTool === 'pline' && isDrawing) {
                 finishPline(false);
-            }
-        } else if (e.key === 'c' || e.key === 'C') {
-            if (currentTool === 'pline' && isDrawing && plineVertices.length >= 2) {
-                finishPline(true);
             }
         } else if (e.key === 'Escape') {
             if (isImageCaptureMode || isPdfPrintMode) {
@@ -10137,6 +10479,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 statusMode.innerText = 'MODE: SELECT';
                 render();
                 showToast('Trim cancelled.', 'info', 1200);
+                return;
+            }
+            if (breakCommand) {
+                breakCommand = null;
+                setActiveToolbarButton('tool-select');
+                statusMode.innerText = 'MODE: SELECT';
+                render();
+                showToast('Break cancelled.', 'info', 1200);
                 return;
             }
             if (moveCommand) {
@@ -10344,6 +10694,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     document.getElementById('btn-move').addEventListener('click', startMoveCommand);
     document.getElementById('btn-scale').addEventListener('click', startScaleCommand);
     document.getElementById('btn-offset').addEventListener('click', startOffsetCommand);
+    document.getElementById('btn-break').addEventListener('click', startBreakCommand);
         document.getElementById('btn-dimension').addEventListener('click', startDimensionCommand);
         document.getElementById('btn-trim').addEventListener('click', startTrimCommand);
         document.getElementById('btn-hatch').addEventListener('click', startHatchCommand);
